@@ -9,7 +9,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type PointerEvent as ReactPointerEvent,
+  type MouseEvent as ReactMouseEvent,
 } from "react";
 
 import { Tabs } from "@/components/ui/vercel-tabs";
@@ -245,22 +245,20 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
   const sectionRef = useRef<HTMLElement | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const offsetRef = useRef(INITIAL_OFFSET);
-  const pointerIdRef = useRef<number | null>(null);
   const dragStateRef = useRef<{
-    pointerX: number;
-    pointerY: number;
+    clientX: number;
+    clientY: number;
     startX: number;
     startY: number;
   } | null>(null);
   const velocityRef = useRef({ x: 0, y: 0 });
-  const transformFrameRef = useRef<number | null>(null);
-  const pendingOffsetRef = useRef(INITIAL_OFFSET);
   const lastPointerRef = useRef<{
     x: number;
     y: number;
     time: number;
   } | null>(null);
   const inertiaFrameRef = useRef<number | null>(null);
+  const dragCleanupRef = useRef<(() => void) | null>(null);
 
   const gridColumns = Math.max(1, Math.min(MAX_GRID_COLUMNS, races.length));
   const gridRows = Math.max(Math.ceil(races.length / gridColumns), GRID_ROWS_FALLBACK);
@@ -333,12 +331,12 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
 
   useEffect(() => {
     return () => {
-      if (inertiaFrameRef.current !== null) {
-        cancelAnimationFrame(inertiaFrameRef.current);
+      if (dragCleanupRef.current) {
+        dragCleanupRef.current();
       }
 
-      if (transformFrameRef.current !== null) {
-        cancelAnimationFrame(transformFrameRef.current);
+      if (inertiaFrameRef.current !== null) {
+        cancelAnimationFrame(inertiaFrameRef.current);
       }
     };
   }, []);
@@ -362,33 +360,25 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
     }
   }, []);
 
-  const flushCanvasTransform = useCallback(() => {
+  const applyCanvasTransform = useCallback((nextOffset: { x: number; y: number }) => {
     if (!canvasRef.current) {
       return;
     }
 
-    const { x, y } = pendingOffsetRef.current;
+    const { x, y } = nextOffset;
     canvasRef.current.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
   }, []);
 
   const setCanvasOffset = useCallback(
     (nextOffset: { x: number; y: number }) => {
-      offsetRef.current = {
+      const wrappedOffset = {
         x: wrapOffset(nextOffset.x, canvasWidth),
         y: wrapOffset(nextOffset.y, canvasHeight),
       };
-      pendingOffsetRef.current = offsetRef.current;
-
-      if (transformFrameRef.current !== null) {
-        return;
-      }
-
-      transformFrameRef.current = requestAnimationFrame(() => {
-        transformFrameRef.current = null;
-        flushCanvasTransform();
-      });
+      offsetRef.current = wrappedOffset;
+      applyCanvasTransform(wrappedOffset);
     },
-    [canvasHeight, canvasWidth, flushCanvasTransform]
+    [applyCanvasTransform, canvasHeight, canvasWidth]
   );
 
   useEffect(() => {
@@ -423,102 +413,28 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
     inertiaFrameRef.current = requestAnimationFrame(step);
   }, [setCanvasOffset, stopInertia]);
 
-  const handleNativePointerMove = useCallback(
-    (event: PointerEvent) => {
-      if (!dragStateRef.current) {
-        return;
-      }
-
-      if (pointerIdRef.current !== null && event.pointerId !== pointerIdRef.current) {
-        return;
-      }
-
-      const deltaX = event.clientX - dragStateRef.current.pointerX;
-      const deltaY = event.clientY - dragStateRef.current.pointerY;
-      const now = performance.now();
-      const previousPointer = lastPointerRef.current;
-
-      if (previousPointer) {
-        const elapsed = Math.max(now - previousPointer.time, 1);
-        const frameScale = 16 / elapsed;
-
-        velocityRef.current = {
-          x: (event.clientX - previousPointer.x) * frameScale,
-          y: (event.clientY - previousPointer.y) * frameScale,
-        };
-      }
-
-      setCanvasOffset({
-        x: dragStateRef.current.startX + deltaX,
-        y: dragStateRef.current.startY + deltaY,
-      });
-
-      lastPointerRef.current = {
-        x: event.clientX,
-        y: event.clientY,
-        time: now,
-      };
-    },
-    [setCanvasOffset]
-  );
-
   const endPointerDrag = useCallback(() => {
     if (!dragStateRef.current) {
       return;
     }
 
-    const section = sectionRef.current;
-    const pointerId = pointerIdRef.current;
-    if (section && pointerId !== null && section.hasPointerCapture(pointerId)) {
-      section.releasePointerCapture(pointerId);
-    }
-
-    pointerIdRef.current = null;
     dragStateRef.current = null;
     lastPointerRef.current = null;
     setIsDragging(false);
     startInertia();
   }, [startInertia]);
 
-  useEffect(() => {
-    function handlePointerMove(event: PointerEvent) {
-      handleNativePointerMove(event);
-    }
-
-    function handlePointerUp(event: PointerEvent) {
-      if (pointerIdRef.current !== null && event.pointerId !== pointerIdRef.current) {
-        return;
-      }
-
-      endPointerDrag();
-    }
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp);
-    window.addEventListener("pointercancel", handlePointerUp);
-
-    return () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
-      window.removeEventListener("pointercancel", handlePointerUp);
-    };
-  }, [endPointerDrag, handleNativePointerMove]);
-
-  function handlePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+  function handlePointerDown(event: ReactMouseEvent<HTMLElement>) {
     if (event.button !== 0) {
       return;
     }
 
     event.preventDefault();
     stopInertia();
-    const target = sectionRef.current ?? event.currentTarget;
-    const pointerId = event.pointerId;
-    pointerIdRef.current = pointerId;
-    target.setPointerCapture(pointerId);
 
     dragStateRef.current = {
-      pointerX: event.clientX,
-      pointerY: event.clientY,
+      clientX: event.clientX,
+      clientY: event.clientY,
       startX: offsetRef.current.x,
       startY: offsetRef.current.y,
     };
@@ -530,6 +446,70 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
     };
 
     setIsDragging(true);
+
+    const handlePointerMove = (nativeEvent: MouseEvent) => {
+      if (!dragStateRef.current) {
+        return;
+      }
+
+      if (nativeEvent.cancelable) {
+        nativeEvent.preventDefault();
+      }
+
+      const deltaX = nativeEvent.clientX - dragStateRef.current.clientX;
+      const deltaY = nativeEvent.clientY - dragStateRef.current.clientY;
+      const now = performance.now();
+      const previousPointer = lastPointerRef.current;
+
+      if (previousPointer) {
+        const elapsed = Math.max(now - previousPointer.time, 1);
+        const frameScale = 16 / elapsed;
+
+        velocityRef.current = {
+          x: (nativeEvent.clientX - previousPointer.x) * frameScale,
+          y: (nativeEvent.clientY - previousPointer.y) * frameScale,
+        };
+      }
+
+      setCanvasOffset({
+        x: dragStateRef.current.startX + deltaX,
+        y: dragStateRef.current.startY + deltaY,
+      });
+
+      lastPointerRef.current = {
+        x: nativeEvent.clientX,
+        y: nativeEvent.clientY,
+        time: now,
+      };
+    };
+
+    const cleanupDragListeners = () => {
+      window.removeEventListener("mousemove", handlePointerMove);
+      window.removeEventListener("mouseup", handlePointerEnd);
+      window.removeEventListener("blur", handleWindowBlur);
+      document.body.style.userSelect = "";
+      dragCleanupRef.current = null;
+    };
+
+    const handlePointerEnd = () => {
+      cleanupDragListeners();
+      endPointerDrag();
+    };
+
+    const handleWindowBlur = () => {
+      cleanupDragListeners();
+      endPointerDrag();
+    };
+
+    if (dragCleanupRef.current) {
+      dragCleanupRef.current();
+    }
+
+    document.body.style.userSelect = "none";
+    window.addEventListener("mousemove", handlePointerMove, { passive: false });
+    window.addEventListener("mouseup", handlePointerEnd);
+    window.addEventListener("blur", handleWindowBlur);
+    dragCleanupRef.current = cleanupDragListeners;
   }
 
   function handleSortChange(nextField: SortField) {
@@ -648,12 +628,11 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
       {viewMode === "grid" ? (
         <section
           ref={sectionRef}
-          className={`relative h-screen overflow-hidden bg-background pt-[57px] ${
+          className={`relative h-screen select-none overflow-hidden bg-background pt-[57px] ${
             isDragging ? "cursor-grabbing" : "cursor-grab"
           }`}
           onDragStart={(event) => event.preventDefault()}
-          onPointerDown={handlePointerDown}
-          style={{ touchAction: "none" }}
+          onMouseDown={handlePointerDown}
         >
           <div
             ref={canvasRef}
