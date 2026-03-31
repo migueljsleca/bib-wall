@@ -75,7 +75,7 @@ const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(
         <div className="relative">
           {/* Hover Highlight */}
           <div
-            className="absolute top-[1px] flex h-[28px] items-center rounded-[6px] bg-foreground/[0.06] transition-all duration-300 ease-out"
+            className="absolute top-[1px] flex h-[28px] items-center rounded-[6px] bg-foreground/[0.04] transition-all duration-300 ease-out"
             style={{
               ...hoverStyle,
               opacity: hoveredIndex !== null ? 1 : 0,
@@ -93,7 +93,9 @@ const Tabs = React.forwardRef<HTMLDivElement, TabsProps>(
             {tabs.map((tab, index) => (
               <div
                 key={tab.id}
-                ref={(el) => (tabRefs.current[index] = el)}
+                ref={(el) => {
+                  tabRefs.current[index] = el
+                }}
                 className={cn(
                   "h-[30px] cursor-pointer px-2.5 py-[7px] transition-colors duration-300",
                   index === activeIndex 

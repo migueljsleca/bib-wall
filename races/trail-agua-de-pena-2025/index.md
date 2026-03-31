@@ -1,5 +1,5 @@
 ---
-raceName: Trail Agua de Pena
+raceName: Trail Água de Pena
 raceType: Trail
 distance: 25km
 elevation: 1200m

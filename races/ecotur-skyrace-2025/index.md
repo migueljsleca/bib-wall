@@ -1,5 +1,5 @@
 ---
-raceName: Ecotur Skyrace
+raceName: Ecotur Porto Moniz
 raceType: Sky
 distance: 26km
 elevation: 1800m

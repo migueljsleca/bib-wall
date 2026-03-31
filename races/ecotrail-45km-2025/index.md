@@ -1,5 +1,5 @@
 ---
-raceName: Ecotrail 45km
+raceName: EcoTrail Funchal
 raceType: Trail
 distance: 45km
 elevation: 2000m

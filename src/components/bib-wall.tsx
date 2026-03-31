@@ -10,6 +10,7 @@ import {
   useState,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
+  type Ref,
 } from "react";
 
 import { Tabs } from "@/components/ui/vercel-tabs";
@@ -17,14 +18,19 @@ import type { RaceEntry } from "@/lib/race-types";
 
 const CARD_WIDTH = 290;
 const CANVAS_SPACING = 65;
-const MAX_GRID_COLUMNS = 4;
+const MIN_GRID_COLUMNS = 4;
+const MAX_GRID_COLUMNS = 9;
+const MIN_TILE_WIDTH = 3400;
 const TILE_OFFSETS = [-1, 0, 1];
 const PREVIEW_ASPECT_RATIO = 1.06 / 0.82;
 const PREVIEW_HEIGHT = CARD_WIDTH / PREVIEW_ASPECT_RATIO;
 const META_REVEAL_SPACE = 28;
 const TILE_GUTTER = CANVAS_SPACING / 2;
+const BOARD_INSET_X = TILE_GUTTER;
+const BOARD_INSET_Y = TILE_GUTTER;
 const INERTIA_FRICTION = 0.92;
 const INERTIA_MIN_SPEED = 0.2;
+const DRAG_START_THRESHOLD = 6;
 const INITIAL_OFFSET = { x: -160, y: -120 };
 const FILTERS = ["All", "Trail", "Road", "Sky", "VK"] as const;
 const SORT_FIELDS = ["date", "distance", "elevation"] as const;
@@ -54,6 +60,20 @@ function parseRaceDate(value: string) {
   }
 
   return new Date(year, month - 1, day).getTime();
+}
+
+function formatRaceDate(value: string) {
+  const timestamp = parseRaceDate(value);
+
+  if (!timestamp) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(timestamp);
 }
 
 function wrapOffset(value: number, size: number) {
@@ -103,7 +123,7 @@ function ListIcon() {
 
 function NavStatTooltip({ label }: { label: string }) {
   return (
-    <span className="pointer-events-none absolute left-1/2 top-full mt-2 -translate-x-1/2 rounded-[6px] border border-border/70 bg-background/95 px-2 py-1 text-[10px] normal-case text-foreground opacity-0 shadow-sm transition duration-150 group-hover:opacity-100">
+    <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 -translate-x-1/2 whitespace-nowrap rounded-[6px] border border-border/70 bg-background/95 px-2 py-1 font-mono text-[12px] normal-case text-foreground opacity-0 shadow-sm transition duration-150 group-hover:opacity-100">
       {label}
     </span>
   );
@@ -111,14 +131,111 @@ function NavStatTooltip({ label }: { label: string }) {
 
 const GRID_ROWS_FALLBACK = 1;
 
-function getCardPosition(index: number, gridColumns: number) {
+function getCardPosition(
+  index: number,
+  gridColumns: number
+) {
   const column = index % gridColumns;
   const row = Math.floor(index / gridColumns);
+  const columnStep = CARD_WIDTH + CANVAS_SPACING;
+  const rowStep = PREVIEW_HEIGHT + CANVAS_SPACING;
 
   return {
-    x: TILE_GUTTER + column * (CARD_WIDTH + CANVAS_SPACING),
-    y: TILE_GUTTER + row * (PREVIEW_HEIGHT + CANVAS_SPACING),
+    x: BOARD_INSET_X + column * columnStep,
+    y: BOARD_INSET_Y + row * rowStep,
   };
+}
+
+function getGridColumns(raceCount: number) {
+  const minColumns = Math.min(MIN_GRID_COLUMNS, raceCount);
+  const maxColumns = Math.min(MAX_GRID_COLUMNS, raceCount);
+  const widthPreferredColumns = Math.min(
+    maxColumns,
+    Math.max(minColumns, Math.ceil(MIN_TILE_WIDTH / (CARD_WIDTH + CANVAS_SPACING)))
+  );
+
+  let bestColumns = widthPreferredColumns;
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  for (let columns = widthPreferredColumns; columns <= maxColumns; columns += 1) {
+    const repeatedCells = (columns - (raceCount % columns)) % columns;
+    const preferredWidthPenalty = Math.abs(columns - widthPreferredColumns);
+    const score = repeatedCells * 100 + preferredWidthPenalty * 10;
+
+    if (score < bestScore) {
+      bestScore = score;
+      bestColumns = columns;
+    }
+  }
+
+  return bestColumns;
+}
+
+function getStableShuffleValue(value: string) {
+  let hash = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+
+  return hash;
+}
+
+function createSeededRandom(seed: number) {
+  let state = seed >>> 0;
+
+  return () => {
+    state += 0x6d2b79f5;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function CloseIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 256 256" className="size-4 fill-current">
+      <path d="M205.66,194.34a8,8,0,0,1-11.32,11.32L128,139.31,61.66,205.66A8,8,0,0,1,50.34,194.34L116.69,128,50.34,61.66A8,8,0,0,1,61.66,50.34L128,116.69l66.34-66.35a8,8,0,0,1,11.32,11.32L139.31,128Z" />
+    </svg>
+  );
+}
+
+function DownloadIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 256 256" className="size-4 fill-current">
+      <path d="M208,144v48H48V144a8,8,0,0,0-16,0v48a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V144a8,8,0,0,0-16,0Zm-85.66,29.66a8,8,0,0,0,11.32,0l40-40a8,8,0,0,0-11.32-11.32L136,148.69V40a8,8,0,0,0-16,0V148.69l-26.34-26.35a8,8,0,0,0-11.32,11.32Z" />
+    </svg>
+  );
+}
+
+function ChevronLeftIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 256 256" className="size-4 fill-current">
+      <path d="M157.66,210.34a8,8,0,0,1-11.32,0l-72-72a8,8,0,0,1,0-11.32l72-72a8,8,0,0,1,11.32,11.32L91.31,128l66.35,66.34A8,8,0,0,1,157.66,210.34Z" />
+    </svg>
+  );
+}
+
+function ChevronRightIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 256 256" className="size-4 fill-current">
+      <path d="M181.66,133.66l-72,72a8,8,0,0,1-11.32-11.32L164.69,128,98.34,61.66a8,8,0,0,1,11.32-11.32l72,72A8,8,0,0,1,181.66,133.66Z" />
+    </svg>
+  );
+}
+
+function getStoryBlocks(notes: string) {
+  const normalized = notes.replace(/\r\n/g, "\n").trim();
+
+  if (!normalized || normalized.toLowerCase() === "metadata pending update.") {
+    return [];
+  }
+
+  return normalized
+    .split(/\n{2,}/)
+    .map((block) => block.trim())
+    .filter(Boolean);
 }
 
 function RacePreview({ image, raceName }: { image?: string; raceName: string }) {
@@ -150,15 +267,20 @@ function GalleryCard({
   item,
   x,
   y,
+  onOpen,
 }: {
   item: RaceEntry;
   x: number;
   y: number;
+  onOpen: (item: RaceEntry) => void;
 }) {
   return (
-    <article
-      className="group absolute w-[290px] cursor-inherit select-none"
+    <button
+      type="button"
+      className="group absolute w-[290px] cursor-pointer select-none text-left"
       onDragStart={(event) => event.preventDefault()}
+      onClick={() => onOpen(item)}
+      aria-label={`Open ${item.raceName} details`}
       style={{
         left: `${x}px`,
         top: `${y}px`,
@@ -193,19 +315,36 @@ function GalleryCard({
                 {item.elevation}
               </span>
             </div>
-            <div className="shrink-0 text-right">{item.date}</div>
+            <div className="shrink-0 text-right">{formatRaceDate(item.date)}</div>
           </div>
         </div>
       </div>
-    </article>
+    </button>
   );
 }
 
-function ListRow({ item, index }: { item: RaceEntry; index: number }) {
+function ListRow({
+  item,
+  index,
+  onOpen,
+  rowRef,
+  onHoverStart,
+}: {
+  item: RaceEntry;
+  index: number;
+  onOpen: (item: RaceEntry) => void;
+  rowRef?: Ref<HTMLButtonElement>;
+  onHoverStart?: () => void;
+}) {
   return (
-    <article
-      className="flex animate-[list-row-enter_680ms_cubic-bezier(0.22,1,0.36,1)] items-center gap-6 py-5 opacity-0 [animation-delay:var(--row-delay)] [animation-fill-mode:forwards] first:pt-0 last:pb-0"
+    <button
+      type="button"
+      onClick={() => onOpen(item)}
+      ref={rowRef}
+      onMouseEnter={onHoverStart}
+      className="relative z-10 -mx-4 flex w-[calc(100%+2rem)] animate-[list-row-enter_680ms_cubic-bezier(0.22,1,0.36,1)] items-center gap-6 rounded-[8px] px-2 py-3 text-left opacity-0 transition-colors [animation-delay:var(--row-delay)] [animation-fill-mode:forwards] hover:text-foreground sm:-mx-5 sm:w-[calc(100%+2.5rem)] sm:px-3 sm:py-3"
       style={{ "--row-delay": `${Math.min(index, 8) * 45}ms` } as CSSProperties}
+      aria-label={`Open ${item.raceName} details`}
     >
       <div className="w-[112px] shrink-0">
         <RacePreview image={item.bibImage} raceName={item.raceName} />
@@ -229,10 +368,201 @@ function ListRow({ item, index }: { item: RaceEntry; index: number }) {
 
         <div className="shrink-0 text-right">
           <p className="text-[14px] text-foreground">{item.raceType}</p>
-          <p className="mt-0.5 text-sm text-muted-foreground">{item.date}</p>
+          <p className="mt-0.5 text-sm text-muted-foreground">{formatRaceDate(item.date)}</p>
         </div>
       </div>
-    </article>
+    </button>
+  );
+}
+
+function RaceDetailPanel({
+  race,
+  onClose,
+}: {
+  race: RaceEntry;
+  onClose: () => void;
+}) {
+  const storyBlocks = getStoryBlocks(race.notes);
+  const hasPhotos = race.photos.length > 0;
+  const hasRoute = Boolean(race.gpxFile);
+  const hasContent = storyBlocks.length > 0 || hasPhotos || hasRoute;
+  const [activePhotoIndex, setActivePhotoIndex] = useState(0);
+
+  return (
+    <div className="fixed inset-0 z-30">
+      <button
+        type="button"
+        aria-label="Close race details"
+        className="absolute inset-0 bg-background/72 backdrop-blur-[2px]"
+        onClick={onClose}
+      />
+
+      <aside className="pointer-events-none absolute inset-x-4 inset-y-4 flex justify-end">
+        <div
+          className="pointer-events-auto flex h-full max-h-full w-full max-w-[460px] flex-col overflow-hidden rounded-[4px] border border-border/70 bg-[color:color-mix(in_oklab,var(--background)_88%,white_12%)] shadow-[0_24px_80px_rgba(15,15,15,0.12)] backdrop-blur-xl"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <div className="flex items-start justify-between gap-4 border-b border-border/70 px-5 pt-5 pb-4">
+            <div className="min-w-0">
+              <p className="text-sm uppercase text-muted-foreground">
+                Race Notes
+              </p>
+              <h2 className="mt-2 text-sm text-foreground">{race.raceName}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">{formatRaceDate(race.date)}</p>
+            </div>
+
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close details panel"
+              className="inline-flex size-9 shrink-0 items-center justify-center border border-border/70 text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            >
+              <CloseIcon />
+            </button>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="space-y-6 pb-5">
+              <div className="grid gap-0 border-x border-b border-border/70 sm:grid-cols-[minmax(0,1fr)_176px]">
+                <div className="relative flex items-center justify-center overflow-hidden bg-muted/65 p-5">
+                  <div className="relative mx-auto w-[88%]">
+                    <RacePreview image={race.bibImage} raceName={race.raceName} />
+                  </div>
+                </div>
+
+                <div className="grid h-full grid-cols-1 divide-y divide-border/70 border-l border-border/70 text-sm text-muted-foreground">
+                  <div className="bg-background px-3 py-3">
+                    <p>Type</p>
+                    <p className="mt-1 text-sm tracking-normal text-foreground">{race.raceType}</p>
+                  </div>
+                  <div className="bg-background px-3 py-3">
+                    <p>Distance</p>
+                    <p className="mt-1 text-sm tracking-normal text-foreground">{race.distance}</p>
+                  </div>
+                  <div className="bg-background px-3 py-3">
+                    <p>Elevation</p>
+                    <p className="mt-1 text-sm tracking-normal text-foreground">{race.elevation}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-5 px-5 [font-family:var(--font-geist-sans)]">
+                {hasRoute ? (
+                  <div>
+                    <a
+                      href={race.gpxFile}
+                      target="_blank"
+                      rel="noreferrer"
+                      download
+                      className="inline-flex items-center gap-2 text-sm text-foreground underline decoration-foreground/30 underline-offset-4 transition hover:decoration-foreground"
+                    >
+                      <DownloadIcon />
+                      Download GPX file
+                    </a>
+                  </div>
+                ) : null}
+
+                {storyBlocks.length > 0
+                  ? storyBlocks.map((block, index) => {
+                      const lines = block
+                        .split("\n")
+                        .map((line) => line.trim())
+                        .filter(Boolean);
+                      const isList =
+                        lines.length > 1 && lines.every((line) => line.startsWith("- "));
+
+                      if (isList) {
+                        return (
+                          <ul
+                            key={`${race.slug}-story-${index}`}
+                            className="space-y-2 text-[14px] leading-6 text-foreground"
+                          >
+                            {lines.map((line) => (
+                              <li key={line} className="flex items-start gap-3">
+                                <span className="mt-2 size-1.5 shrink-0 rounded-full bg-foreground" />
+                                <span>{line.slice(2)}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        );
+                      }
+
+                      return (
+                        <p
+                          key={`${race.slug}-story-${index}`}
+                          className="whitespace-pre-line text-[14px] leading-6 text-foreground"
+                        >
+                          {block}
+                        </p>
+                      );
+                    })
+                  : null}
+
+                {hasPhotos ? (
+                  <div className="space-y-3">
+                    <div>
+                      <div className="relative aspect-[4/3] overflow-hidden border border-border/70 bg-background">
+                        <Image
+                          src={race.photos[activePhotoIndex]}
+                          alt={`${race.raceName} photo ${activePhotoIndex + 1}`}
+                          fill
+                          className="object-cover"
+                          sizes="(max-width: 640px) 100vw, 420px"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="text-sm text-muted-foreground">
+                        {activePhotoIndex + 1}/{race.photos.length}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        {race.photos.length > 1 ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setActivePhotoIndex((current) =>
+                                  current === 0 ? race.photos.length - 1 : current - 1
+                                )
+                              }
+                              className="inline-flex size-9 items-center justify-center border border-border/70 text-foreground transition hover:bg-muted"
+                              aria-label="Previous photo"
+                            >
+                              <ChevronLeftIcon />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setActivePhotoIndex((current) =>
+                                  current === race.photos.length - 1 ? 0 : current + 1
+                                )
+                              }
+                              className="inline-flex size-9 items-center justify-center border border-border/70 text-foreground transition hover:bg-muted"
+                              aria-label="Next photo"
+                            >
+                              <ChevronRightIcon />
+                            </button>
+                          </>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+
+                {!hasContent ? (
+                  <p className="text-sm leading-6 text-muted-foreground">
+                    info coming soon...
+                  </p>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      </aside>
+
+    </div>
   );
 }
 
@@ -241,15 +571,26 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
   const [activeFilter, setActiveFilter] = useState("All");
   const [sortField, setSortField] = useState<SortField>("date");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [selectedRace, setSelectedRace] = useState<RaceEntry | null>(null);
+  const [hoveredListRace, setHoveredListRace] = useState<string | null>(null);
+  const [listHoverStyle, setListHoverStyle] = useState<CSSProperties>({
+    top: "0px",
+    left: "0px",
+    width: "0px",
+    height: "0px",
+  });
   const [isDragging, setIsDragging] = useState(false);
   const sectionRef = useRef<HTMLElement | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const listContainerRef = useRef<HTMLDivElement | null>(null);
+  const listRowRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const offsetRef = useRef(INITIAL_OFFSET);
   const dragStateRef = useRef<{
     clientX: number;
     clientY: number;
     startX: number;
     startY: number;
+    hasMoved: boolean;
   } | null>(null);
   const velocityRef = useRef({ x: 0, y: 0 });
   const lastPointerRef = useRef<{
@@ -259,11 +600,34 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
   } | null>(null);
   const inertiaFrameRef = useRef<number | null>(null);
   const dragCleanupRef = useRef<(() => void) | null>(null);
+  const suppressClickRef = useRef(false);
 
-  const gridColumns = Math.max(1, Math.min(MAX_GRID_COLUMNS, races.length));
+  const shuffledRaces = useMemo(() => {
+    const items = [...races];
+    const seedSource = races
+      .map((race) => race.slug)
+      .sort()
+      .join("|");
+    const seed = getStableShuffleValue(seedSource) || 1;
+    const random = createSeededRandom(seed);
+
+    for (let index = items.length - 1; index > 0; index -= 1) {
+      const swapIndex = Math.floor(random() * (index + 1));
+      [items[index], items[swapIndex]] = [items[swapIndex], items[index]];
+    }
+
+    return items;
+  }, [races]);
+  const gridColumns = Math.max(1, getGridColumns(races.length));
   const gridRows = Math.max(Math.ceil(races.length / gridColumns), GRID_ROWS_FALLBACK);
-  const canvasWidth = gridColumns * (CARD_WIDTH + CANVAS_SPACING);
-  const canvasHeight = gridRows * (PREVIEW_HEIGHT + CANVAS_SPACING);
+  const tiledRaces = useMemo(() => {
+    const tileCellCount = gridColumns * gridRows;
+    return Array.from({ length: tileCellCount }, (_, index) => shuffledRaces[index % shuffledRaces.length]);
+  }, [gridColumns, gridRows, shuffledRaces]);
+  const canvasWidth =
+    BOARD_INSET_X * 2 + (gridColumns - 1) * (CARD_WIDTH + CANVAS_SPACING) + CARD_WIDTH;
+  const canvasHeight =
+    BOARD_INSET_Y * 2 + (gridRows - 1) * (PREVIEW_HEIGHT + CANVAS_SPACING) + PREVIEW_HEIGHT;
   const filteredRaces =
     activeFilter === "All"
       ? races
@@ -342,6 +706,59 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
   }, []);
 
   useEffect(() => {
+    if (!selectedRace) {
+      return;
+    }
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setSelectedRace(null);
+      }
+    };
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [selectedRace]);
+
+  useEffect(() => {
+    if (!hoveredListRace || !listContainerRef.current) {
+      return;
+    }
+
+    const updateHoverStyle = () => {
+      const container = listContainerRef.current;
+      const row = listRowRefs.current[hoveredListRace];
+
+      if (!container || !row) {
+        return;
+      }
+
+      const containerRect = container.getBoundingClientRect();
+      const rowRect = row.getBoundingClientRect();
+
+      setListHoverStyle({
+        top: `${rowRect.top - containerRect.top}px`,
+        left: `${rowRect.left - containerRect.left}px`,
+        width: `${rowRect.width}px`,
+        height: `${rowRect.height}px`,
+      });
+    };
+
+    updateHoverStyle();
+    window.addEventListener("resize", updateHoverStyle);
+
+    return () => {
+      window.removeEventListener("resize", updateHoverStyle);
+    };
+  }, [hoveredListRace, sortedRaces]);
+
+  useEffect(() => {
     const frame = requestAnimationFrame(() => {
       setAnimatedCount(displayedRaces.length);
       setAnimatedDistance(totalDistance);
@@ -418,10 +835,17 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
       return;
     }
 
+    suppressClickRef.current = dragStateRef.current.hasMoved;
     dragStateRef.current = null;
     lastPointerRef.current = null;
     setIsDragging(false);
-    startInertia();
+
+    if (suppressClickRef.current) {
+      startInertia();
+      return;
+    }
+
+    velocityRef.current = { x: 0, y: 0 };
   }, [startInertia]);
 
   function handlePointerDown(event: ReactMouseEvent<HTMLElement>) {
@@ -437,6 +861,7 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
       clientY: event.clientY,
       startX: offsetRef.current.x,
       startY: offsetRef.current.y,
+      hasMoved: false,
     };
     velocityRef.current = { x: 0, y: 0 };
     lastPointerRef.current = {
@@ -458,8 +883,18 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
 
       const deltaX = nativeEvent.clientX - dragStateRef.current.clientX;
       const deltaY = nativeEvent.clientY - dragStateRef.current.clientY;
+      const movement = Math.hypot(deltaX, deltaY);
       const now = performance.now();
       const previousPointer = lastPointerRef.current;
+
+      if (!dragStateRef.current.hasMoved && movement < DRAG_START_THRESHOLD) {
+        return;
+      }
+
+      if (!dragStateRef.current.hasMoved) {
+        dragStateRef.current.hasMoved = true;
+        setIsDragging(true);
+      }
 
       if (previousPointer) {
         const elapsed = Math.max(now - previousPointer.time, 1);
@@ -540,15 +975,53 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
     return sortDirection === "asc" ? "lowest" : "highest";
   }
 
+  function handleHomeClick() {
+    setViewMode("grid");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function handleRaceOpen(item: RaceEntry) {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
+
+    setSelectedRace(item);
+  }
+
   return (
     <main className="min-h-screen bg-background font-sans text-foreground">
       <header className="fixed inset-x-0 top-0 z-20 border-b border-border/70 bg-background/88 backdrop-blur-xl">
         <div className="flex items-center justify-between gap-6 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-1.5 text-left text-sm text-muted-foreground">
-            <span className="shrink-0 font-heading text-foreground">BIB WALL</span>
+            <button
+              type="button"
+              onClick={handleHomeClick}
+              aria-label="Go to home grid view"
+              className="flex shrink-0 items-center gap-2 rounded-md transition-opacity hover:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/25"
+            >
+              <Image
+                src="/logo.svg"
+                alt="BIB WALL"
+                width={807}
+                height={577}
+                priority
+                className="h-7 w-auto shrink-0"
+              />
+              <span className="shrink-0 font-heading text-foreground">BIB WALL</span>
+            </button>
             <span className="shrink-0 text-muted-foreground/60">·</span>
-            <span className="truncate [font-family:var(--font-geist-sans)]">
-              A collection of race bibs from years of type 2 fun.
+            <span className="flex min-w-0 items-center [font-family:var(--font-geist-sans)]">
+              <span className="truncate">A collection of race bibs from years of&nbsp;</span>
+              <span className="group relative shrink-0">
+                <span className="underline decoration-foreground/30 underline-offset-[3px] transition-colors group-hover:text-foreground group-hover:decoration-foreground/60">
+                  type 2 fun
+                </span>
+                <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 -translate-x-1/2 whitespace-nowrap rounded-[6px] border border-border/70 bg-background/95 px-2 py-1 font-mono text-[12px] normal-case text-foreground opacity-0 shadow-sm transition duration-150 group-hover:opacity-100">
+                  Not always fun in the moment, but somehow you sign up for another one after.
+                </span>
+              </span>
+              <span className="shrink-0">.</span>
             </span>
           </div>
 
@@ -645,24 +1118,21 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
           >
             {TILE_OFFSETS.flatMap((tileY) =>
               TILE_OFFSETS.flatMap((tileX) =>
-                races.map((item, index) => {
+                tiledRaces.map((item, index) => {
                   const position = getCardPosition(index, gridColumns);
 
                   return (
                     <GalleryCard
-                      key={`${tileX}-${tileY}-${item.slug}`}
+                      key={`${tileX}-${tileY}-${index}-${item.slug}`}
                       item={item}
                       x={position.x + tileX * canvasWidth}
                       y={position.y + tileY * canvasHeight}
+                      onOpen={handleRaceOpen}
                     />
                   );
                 })
               )
             )}
-          </div>
-
-          <div className="pointer-events-none absolute bottom-6 left-6 text-[11px] uppercase text-muted-foreground/80">
-            Drag to explore
           </div>
         </section>
       ) : (
@@ -705,14 +1175,42 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
               </div>
             </div>
 
-            <div className="divide-y divide-border/70">
+            <div
+              ref={listContainerRef}
+              className="relative"
+              onMouseLeave={() => setHoveredListRace(null)}
+            >
+              <div
+                className="pointer-events-none absolute rounded-[8px] bg-foreground/[0.04] transition-all duration-300 ease-out"
+                style={{
+                  ...listHoverStyle,
+                  opacity: hoveredListRace ? 1 : 0,
+                }}
+              />
               {sortedRaces.map((item, index) => (
-                <ListRow key={`${listAnimationCycle}-${item.slug}`} item={item} index={index} />
+                <ListRow
+                  key={`${listAnimationCycle}-${item.slug}`}
+                  item={item}
+                  index={index}
+                  onOpen={handleRaceOpen}
+                  rowRef={(node) => {
+                    listRowRefs.current[item.slug] = node;
+                  }}
+                  onHoverStart={() => setHoveredListRace(item.slug)}
+                />
               ))}
             </div>
           </div>
         </section>
       )}
+
+      {selectedRace ? (
+        <RaceDetailPanel
+          key={selectedRace.slug}
+          race={selectedRace}
+          onClose={() => setSelectedRace(null)}
+        />
+      ) : null}
     </main>
   );
 }

@@ -1,5 +1,5 @@
 ---
-raceName: KM Vertical Camara de Lobos
+raceName: KV Camara de Lobos
 raceType: VK
 distance: 2.8km
 elevation: 1000m

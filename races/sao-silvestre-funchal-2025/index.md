@@ -1,5 +1,5 @@
 ---
-raceName: Sao Silvestre Funchal
+raceName: São Silvestre Funchal
 raceType: Road
 distance: 5.8km
 elevation: 20m
