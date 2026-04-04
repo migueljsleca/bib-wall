@@ -628,10 +628,13 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
     BOARD_INSET_X * 2 + (gridColumns - 1) * (CARD_WIDTH + CANVAS_SPACING) + CARD_WIDTH;
   const canvasHeight =
     BOARD_INSET_Y * 2 + (gridRows - 1) * (PREVIEW_HEIGHT + CANVAS_SPACING) + PREVIEW_HEIGHT;
-  const filteredRaces =
-    activeFilter === "All"
-      ? races
-      : races.filter((race) => race.raceType.toLowerCase() === activeFilter.toLowerCase());
+  const filteredRaces = useMemo(
+    () =>
+      activeFilter === "All"
+        ? races
+        : races.filter((race) => race.raceType.toLowerCase() === activeFilter.toLowerCase()),
+    [activeFilter, races]
+  );
   const sortedRaces = useMemo(() => {
     const items = [...filteredRaces];
 
@@ -742,12 +745,21 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
       const containerRect = container.getBoundingClientRect();
       const rowRect = row.getBoundingClientRect();
 
-      setListHoverStyle({
+      const nextHoverStyle = {
         top: `${rowRect.top - containerRect.top}px`,
         left: `${rowRect.left - containerRect.left}px`,
         width: `${rowRect.width}px`,
         height: `${rowRect.height}px`,
-      });
+      };
+
+      setListHoverStyle((currentHoverStyle) =>
+        currentHoverStyle.top === nextHoverStyle.top &&
+        currentHoverStyle.left === nextHoverStyle.left &&
+        currentHoverStyle.width === nextHoverStyle.width &&
+        currentHoverStyle.height === nextHoverStyle.height
+          ? currentHoverStyle
+          : nextHoverStyle
+      );
     };
 
     updateHoverStyle();
