@@ -221,3 +221,51 @@ html[data-view-mode="list"] body::-webkit-scrollbar {
     filter: blur(0);
   }
 }
+
+@keyframes sort-qualifier-enter {
+  0% {
+    opacity: 0;
+    transform: translateY(0.9em);
+    filter: blur(4px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+}
+
+@keyframes sort-qualifier-exit {
+  0% {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-0.9em);
+    filter: blur(4px);
+  }
+}
+
+@keyframes detail-backdrop-enter {
+  0% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes detail-panel-enter {
+  0% {
+    transform: translateX(calc(100% + 1.5rem));
+  }
+
+  100% {
+    transform: translateX(0);
+  }
+}

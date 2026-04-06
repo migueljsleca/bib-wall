@@ -34,6 +34,8 @@ const INERTIA_FRICTION = 0.92;
 const INERTIA_MIN_SPEED = 0.2;
 const DRAG_START_THRESHOLD = 6;
 const INITIAL_OFFSET = { x: -160, y: -120 };
+const DETAIL_PANEL_TRANSITION_MS = 350;
+const DETAIL_PANEL_EASING = "cubic-bezier(0.22,1,0.36,1)";
 const FILTERS = ["All", "Trail", "Road", "Sky", "VK"] as const;
 const SORT_FIELDS = ["date", "distance", "elevation"] as const;
 const INLINE_LINK_PATTERN = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s]+)/g;
@@ -128,6 +130,30 @@ function NavStatTooltip({ label }: { label: string }) {
   return (
     <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 -translate-x-1/2 whitespace-nowrap rounded-[6px] border border-border/70 bg-background/95 px-2 py-1 font-mono text-[12px] normal-case text-foreground opacity-0 shadow-sm transition duration-150 group-hover:opacity-100">
       {label}
+    </span>
+  );
+}
+
+function AnimatedSortQualifier({ value }: { value: string | null }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`relative top-[0.02em] inline-grid align-baseline text-muted-foreground/80 transition-[grid-template-columns,opacity,margin] duration-[380ms] ease-[cubic-bezier(0.22,1,0.36,1)] ${
+        value ? "ml-0.5 grid-cols-[1fr] opacity-100" : "ml-0 grid-cols-[0fr] opacity-0"
+      }`}
+    >
+      <span className="-my-[0.14em] overflow-hidden py-[0.14em]">
+        <span className="block h-[1.3em] whitespace-nowrap leading-[1.2]">
+          {value ? (
+            <span
+              key={value}
+              className="block animate-[sort-qualifier-enter_380ms_cubic-bezier(0.22,1,0.36,1)] whitespace-nowrap leading-[1.2]"
+            >
+              [{value}]
+            </span>
+          ) : null}
+        </span>
+      </span>
     </span>
   );
 }
@@ -446,29 +472,59 @@ function ListRow({
 
 function RaceDetailPanel({
   race,
+  isOpen,
   onClose,
+  onExited,
 }: {
   race: RaceEntry;
+  isOpen: boolean;
   onClose: () => void;
+  onExited: () => void;
 }) {
   const storyBlocks = getStoryBlocks(race.notes);
   const hasPhotos = race.photos.length > 0;
   const hasRoute = Boolean(race.gpxFile);
   const hasContent = storyBlocks.length > 0 || hasPhotos || hasRoute;
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
+  const transitionDuration = `${DETAIL_PANEL_TRANSITION_MS}ms`;
 
   return (
-    <div className="fixed inset-0 z-30">
+    <div
+      className={`fixed inset-0 z-30 ${isOpen ? "pointer-events-auto" : "pointer-events-none"}`}
+    >
       <button
         type="button"
         aria-label="Close race details"
-        className="absolute inset-0 bg-background/72 backdrop-blur-[2px]"
+        className={`absolute inset-0 bg-background/72 backdrop-blur-[2px] ${
+          isOpen ? "animate-[detail-backdrop-enter_350ms_cubic-bezier(0.22,1,0.36,1)]" : ""
+        } transition-opacity ${
+          isOpen ? "opacity-100" : "opacity-0"
+        }`}
+        style={{
+          transitionDuration,
+          transitionTimingFunction: DETAIL_PANEL_EASING,
+        }}
         onClick={onClose}
       />
 
       <aside className="pointer-events-none absolute inset-x-4 inset-y-4 flex justify-end">
         <div
-          className="pointer-events-auto flex h-full max-h-full w-full max-w-[460px] flex-col overflow-hidden rounded-[4px] border border-border/70 bg-[color:color-mix(in_oklab,var(--background)_88%,white_12%)] shadow-[0_24px_80px_rgba(15,15,15,0.12)] backdrop-blur-xl"
+          className={`pointer-events-auto flex h-full max-h-full w-full max-w-[460px] transform-gpu flex-col overflow-hidden rounded-[4px] border border-border/70 bg-[color:color-mix(in_oklab,var(--background)_88%,white_12%)] shadow-[0_24px_80px_rgba(15,15,15,0.12)] backdrop-blur-xl ${
+            isOpen ? "animate-[detail-panel-enter_350ms_cubic-bezier(0.22,1,0.36,1)]" : ""
+          } transition-transform ${
+            isOpen ? "translate-x-0" : "translate-x-[calc(100%+1.5rem)]"
+          }`}
+          style={{
+            transitionDuration,
+            transitionTimingFunction: DETAIL_PANEL_EASING,
+          }}
+          onTransitionEnd={(event) => {
+            if (event.target !== event.currentTarget || event.propertyName !== "transform" || isOpen) {
+              return;
+            }
+
+            onExited();
+          }}
           onClick={(event) => event.stopPropagation()}
         >
           <div className="flex items-start justify-between gap-4 border-b border-border/70 px-5 pt-5 pb-4">
@@ -641,6 +697,8 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
   const [sortField, setSortField] = useState<SortField>("date");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [selectedRace, setSelectedRace] = useState<RaceEntry | null>(null);
+  const [isDetailPanelOpen, setIsDetailPanelOpen] = useState(false);
+  const [detailPanelInstance, setDetailPanelInstance] = useState(0);
   const [hoveredListRace, setHoveredListRace] = useState<string | null>(null);
   const [listHoverStyle, setListHoverStyle] = useState<CSSProperties>({
     top: "0px",
@@ -756,6 +814,9 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
   const [animatedDistance, setAnimatedDistance] = useState(0);
   const [animatedElevation, setAnimatedElevation] = useState(0);
   const [listAnimationCycle, setListAnimationCycle] = useState(0);
+  const handleRaceClose = useCallback(() => {
+    setIsDetailPanelOpen(false);
+  }, []);
 
   useEffect(() => {
     document.documentElement.dataset.viewMode = viewMode;
@@ -784,7 +845,7 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setSelectedRace(null);
+        handleRaceClose();
       }
     };
 
@@ -796,7 +857,7 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [selectedRace]);
+  }, [handleRaceClose, selectedRace]);
 
   useEffect(() => {
     if (!hoveredListRace || !listContainerRef.current) {
@@ -951,8 +1012,6 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
       time: performance.now(),
     };
 
-    setIsDragging(true);
-
     const handlePointerMove = (nativeEvent: MouseEvent) => {
       if (!dragStateRef.current) {
         return;
@@ -1067,7 +1126,19 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
       return;
     }
 
+    if (selectedRace?.slug === item.slug && isDetailPanelOpen) {
+      return;
+    }
+
+    if (selectedRace?.slug === item.slug) {
+      setDetailPanelInstance((current) => current + 1);
+      setIsDetailPanelOpen(true);
+      return;
+    }
+
     setSelectedRace(item);
+    setDetailPanelInstance((current) => current + 1);
+    setIsDetailPanelOpen(true);
   }
 
   return (
@@ -1247,9 +1318,7 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
                       }`}
                     >
                       <span>{option.label}</span>
-                      {qualifier ? (
-                        <span className="text-muted-foreground/80">[{qualifier}]</span>
-                      ) : null}
+                      <AnimatedSortQualifier value={qualifier} />
                     </button>
                   );
                 })}
@@ -1287,9 +1356,11 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
 
       {selectedRace ? (
         <RaceDetailPanel
-          key={selectedRace.slug}
+          key={`${selectedRace.slug}-${detailPanelInstance}`}
           race={selectedRace}
-          onClose={() => setSelectedRace(null)}
+          isOpen={isDetailPanelOpen}
+          onClose={handleRaceClose}
+          onExited={() => setSelectedRace(null)}
         />
       ) : null}
     </main>
