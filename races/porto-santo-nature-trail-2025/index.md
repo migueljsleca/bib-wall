@@ -7,4 +7,4 @@ date: 17/05/2025
 bibImage: porto-santo-nature-trail-2025.png
 ---
 
-Metadata pending update.
+Almost 1 hour faster than 2 years ago. I will take that.

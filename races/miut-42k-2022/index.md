@@ -7,4 +7,4 @@ date: 23/04/2022
 bibImage: miut-42k-2022.png
 ---
 
-Metadata pending update.
+First MIUT race, and first trail marathon.

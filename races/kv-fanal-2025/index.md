@@ -7,4 +7,6 @@ date: 11/10/2025
 bibImage: kv-fanal-2025.png
 ---
 
-Metadata pending update.
+VK finishing in Fanal.
+
+If sky is clear, great views up there.

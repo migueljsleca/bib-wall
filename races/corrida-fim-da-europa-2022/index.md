@@ -7,4 +7,6 @@ date: 06/02/2022
 bibImage: corrida-fim-da-europa-2022.png
 ---
 
-Metadata pending update.
+From Sintra to Cabo da Roca (the westernmost point of continental Europe).
+
+A road race, but surrounded by nature.

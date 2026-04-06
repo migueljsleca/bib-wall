@@ -7,4 +7,4 @@ date: 12/02/2023
 bibImage: trail-porto-moniz-2023.png
 ---
 
-Metadata pending update.
+First DNF, not preparred for this brutal race.

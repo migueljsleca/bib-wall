@@ -7,4 +7,6 @@ date: 16/09/2023
 bibImage: world-masters-mountain-running-championships-open-race-2023.png
 ---
 
-Metadata pending update.
+World Master Mountain Running Championships 2025
+
+Race held in Madeira.

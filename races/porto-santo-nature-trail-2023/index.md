@@ -7,4 +7,4 @@ date: 20/05/2023
 bibImage: porto-santo-nature-trail-2023.png
 ---
 
-Metadata pending update.
+Route around Porto Santo.

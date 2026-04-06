@@ -7,4 +7,4 @@ date: 12/01/2025
 bibImage: trail-boa-ventura-2025.png
 ---
 
-Metadata pending update.
+One of the coolest routes in Madeira imo

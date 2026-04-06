@@ -7,4 +7,4 @@ date: 15/06/2024
 bibImage: usm-madeira-sky-race-2024.png
 ---
 
-Metadata pending update.
+Crazy race, scrambling on rocks, ropes/chains to climb on

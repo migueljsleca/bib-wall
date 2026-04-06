@@ -7,4 +7,4 @@ date: 11/01/2026
 bibImage: trail-boa-ventura-2026.png
 ---
 
-info coming soon...
+Decided to not race because of small injury in left achilles tendon.

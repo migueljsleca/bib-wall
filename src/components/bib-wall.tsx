@@ -3,6 +3,7 @@
 import NumberFlow, { NumberFlowGroup } from "@number-flow/react";
 import Image from "next/image";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -10,6 +11,7 @@ import {
   useState,
   type CSSProperties,
   type MouseEvent as ReactMouseEvent,
+  type ReactNode,
   type Ref,
 } from "react";
 
@@ -34,6 +36,7 @@ const DRAG_START_THRESHOLD = 6;
 const INITIAL_OFFSET = { x: -160, y: -120 };
 const FILTERS = ["All", "Trail", "Road", "Sky", "VK"] as const;
 const SORT_FIELDS = ["date", "distance", "elevation"] as const;
+const INLINE_LINK_PATTERN = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s]+)/g;
 
 type SortField = (typeof SORT_FIELDS)[number];
 type SortDirection = "asc" | "desc";
@@ -236,6 +239,72 @@ function getStoryBlocks(notes: string) {
     .split(/\n{2,}/)
     .map((block) => block.trim())
     .filter(Boolean);
+}
+
+function sanitizeExternalHref(value: string) {
+  try {
+    const url = new URL(value);
+
+    if (url.protocol === "http:" || url.protocol === "https:") {
+      return url.toString();
+    }
+  } catch {}
+
+  return null;
+}
+
+function renderInlineContent(content: string) {
+  const lines = content.split("\n");
+
+  return lines.map((line, lineIndex) => {
+    const segments: ReactNode[] = [];
+    let lastIndex = 0;
+
+    for (const match of line.matchAll(INLINE_LINK_PATTERN)) {
+      const [fullMatch, markdownLabel, markdownHref, plainHref] = match;
+      const matchIndex = match.index ?? 0;
+
+      if (matchIndex > lastIndex) {
+        segments.push(line.slice(lastIndex, matchIndex));
+      }
+
+      const href = sanitizeExternalHref(markdownHref ?? plainHref ?? "");
+      const label = markdownLabel ?? plainHref ?? fullMatch;
+
+      if (href) {
+        segments.push(
+          <a
+            key={`${lineIndex}-${matchIndex}-${href}`}
+            href={href}
+            target="_blank"
+            rel="noreferrer"
+            className="underline decoration-foreground/30 underline-offset-4 transition hover:decoration-foreground"
+          >
+            {label}
+          </a>
+        );
+      } else {
+        segments.push(fullMatch);
+      }
+
+      lastIndex = matchIndex + fullMatch.length;
+    }
+
+    if (lastIndex < line.length) {
+      segments.push(line.slice(lastIndex));
+    }
+
+    if (segments.length === 0) {
+      segments.push(line);
+    }
+
+    return (
+      <Fragment key={`story-line-${lineIndex}`}>
+        {segments}
+        {lineIndex < lines.length - 1 ? <br /> : null}
+      </Fragment>
+    );
+  });
 }
 
 function RacePreview({ image, raceName }: { image?: string; raceName: string }) {
@@ -480,7 +549,7 @@ function RaceDetailPanel({
                             {lines.map((line) => (
                               <li key={line} className="flex items-start gap-3">
                                 <span className="mt-2 size-1.5 shrink-0 rounded-full bg-foreground" />
-                                <span>{line.slice(2)}</span>
+                                <span>{renderInlineContent(line.slice(2))}</span>
                               </li>
                             ))}
                           </ul>
@@ -490,9 +559,9 @@ function RaceDetailPanel({
                       return (
                         <p
                           key={`${race.slug}-story-${index}`}
-                          className="whitespace-pre-line text-[14px] leading-6 text-foreground"
+                          className="text-[14px] leading-6 text-foreground"
                         >
-                          {block}
+                          {renderInlineContent(block)}
                         </p>
                       );
                     })
@@ -1030,7 +1099,7 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
                   type 2 fun
                 </span>
                 <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 -translate-x-1/2 whitespace-nowrap rounded-[6px] border border-border/70 bg-background/95 px-2 py-1 font-mono text-[12px] normal-case text-foreground opacity-0 shadow-sm transition duration-150 group-hover:opacity-100">
-                  Not always fun in the moment, but somehow you sign up for another one after.
+                  Not always fun in the moment, but somehow you sign up for another race right after.
                 </span>
               </span>
               <span className="shrink-0">.</span>

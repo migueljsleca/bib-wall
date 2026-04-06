@@ -7,4 +7,4 @@ date: 16/08/2025
 bibImage: ecotur-skyrace-2025.png
 ---
 
-Metadata pending update.
+Up and down race at all times, cooool

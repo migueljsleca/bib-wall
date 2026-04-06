@@ -7,4 +7,6 @@ date: 09/02/2025
 bibImage: trail-porto-moniz-2025.png
 ---
 
-Metadata pending update.
+Organization did some route changes, but still kept the race interesting.
+
+One of the races I keep coming back almost every year.

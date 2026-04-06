@@ -7,4 +7,4 @@ date: 28/12/2022
 bibImage: sao-silvestre-funchal-2022.png
 ---
 
-Metadata pending update.
+Time: 28mins

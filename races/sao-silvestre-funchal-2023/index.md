@@ -7,4 +7,5 @@ date: 28/12/2023
 bibImage: sao-silvestre-funchal-2023.png
 ---
 
-Metadata pending update.
+Time: 24:37
+

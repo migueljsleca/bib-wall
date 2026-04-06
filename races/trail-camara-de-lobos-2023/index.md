@@ -7,4 +7,6 @@ date: 18/11/2023
 bibImage: trail-camara-de-lobos-2023.png
 ---
 
-Metadata pending update.
+What a amazing route!
+
+Boca dos Namorados to Curral das Freiras, then up the central mountains of Madeira, passing in Pico Grande.
