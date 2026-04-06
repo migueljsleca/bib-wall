@@ -38,6 +38,7 @@ const DRAG_START_THRESHOLD = 6;
 const INITIAL_OFFSET = { x: -160, y: -120 };
 const DETAIL_PANEL_TRANSITION_MS = 350;
 const DETAIL_PANEL_EASING = "cubic-bezier(0.22,1,0.36,1)";
+const DETAIL_PANEL_BACKDROP_CLOSE_DELAY_MS = 60;
 const FILTERS = ["All", "Trail", "Road", "Sky", "VK"] as const;
 const SORT_FIELDS = ["date", "distance", "elevation"] as const;
 const INLINE_LINK_PATTERN = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s]+)/g;
@@ -478,12 +479,12 @@ function ListRow({
 function RaceDetailPanel({
   race,
   isOpen,
-  onClose,
+  onBackdropClose,
   onExited,
 }: {
   race: RaceEntry;
   isOpen: boolean;
-  onClose: () => void;
+  onBackdropClose: () => void;
   onExited: () => void;
 }) {
   const storyBlocks = getStoryBlocks(race.notes);
@@ -494,9 +495,7 @@ function RaceDetailPanel({
   const transitionDuration = `${DETAIL_PANEL_TRANSITION_MS}ms`;
 
   return (
-    <div
-      className={`fixed inset-0 z-30 ${isOpen ? "pointer-events-auto" : "pointer-events-none"}`}
-    >
+    <div className="fixed inset-0 z-30 pointer-events-auto">
       <button
         type="button"
         aria-label="Close race details"
@@ -509,7 +508,7 @@ function RaceDetailPanel({
           transitionDuration,
           transitionTimingFunction: DETAIL_PANEL_EASING,
         }}
-        onClick={onClose}
+        onClick={onBackdropClose}
       />
 
       <aside className="pointer-events-none absolute inset-x-4 inset-y-4 flex justify-end">
@@ -543,7 +542,7 @@ function RaceDetailPanel({
 
             <button
               type="button"
-              onClick={onClose}
+              onClick={onBackdropClose}
               aria-label="Close details panel"
               className="inline-flex size-9 shrink-0 items-center justify-center border border-border/70 text-muted-foreground transition hover:bg-muted hover:text-foreground"
             >
@@ -733,6 +732,8 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
   const inertiaFrameRef = useRef<number | null>(null);
   const dragCleanupRef = useRef<(() => void) | null>(null);
   const suppressClickRef = useRef(false);
+  const detailPanelExitTimeoutRef = useRef<number | null>(null);
+  const detailPanelBackdropCloseTimeoutRef = useRef<number | null>(null);
 
   const shuffledRaces = useMemo(() => {
     const items = [...races];
@@ -823,9 +824,41 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
   const [animatedDistance, setAnimatedDistance] = useState(0);
   const [animatedElevation, setAnimatedElevation] = useState(0);
   const [listAnimationCycle, setListAnimationCycle] = useState(0);
-  const handleRaceClose = useCallback(() => {
-    setIsDetailPanelOpen(false);
+  const clearDetailPanel = useCallback(() => {
+    if (detailPanelExitTimeoutRef.current !== null) {
+      window.clearTimeout(detailPanelExitTimeoutRef.current);
+      detailPanelExitTimeoutRef.current = null;
+    }
+
+    setSelectedRace(null);
   }, []);
+  const handleRaceClose = useCallback(() => {
+    if (detailPanelBackdropCloseTimeoutRef.current !== null) {
+      window.clearTimeout(detailPanelBackdropCloseTimeoutRef.current);
+      detailPanelBackdropCloseTimeoutRef.current = null;
+    }
+
+    if (detailPanelExitTimeoutRef.current !== null) {
+      window.clearTimeout(detailPanelExitTimeoutRef.current);
+    }
+
+    setIsDetailPanelOpen(false);
+
+    detailPanelExitTimeoutRef.current = window.setTimeout(() => {
+      detailPanelExitTimeoutRef.current = null;
+      setSelectedRace(null);
+    }, DETAIL_PANEL_TRANSITION_MS + 60);
+  }, []);
+  const handleBackdropClose = useCallback(() => {
+    if (detailPanelBackdropCloseTimeoutRef.current !== null) {
+      window.clearTimeout(detailPanelBackdropCloseTimeoutRef.current);
+    }
+
+    detailPanelBackdropCloseTimeoutRef.current = window.setTimeout(() => {
+      detailPanelBackdropCloseTimeoutRef.current = null;
+      handleRaceClose();
+    }, DETAIL_PANEL_BACKDROP_CLOSE_DELAY_MS);
+  }, [handleRaceClose]);
 
   useEffect(() => {
     document.documentElement.dataset.viewMode = viewMode;
@@ -837,6 +870,14 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
 
   useEffect(() => {
     return () => {
+      if (detailPanelBackdropCloseTimeoutRef.current !== null) {
+        window.clearTimeout(detailPanelBackdropCloseTimeoutRef.current);
+      }
+
+      if (detailPanelExitTimeoutRef.current !== null) {
+        window.clearTimeout(detailPanelExitTimeoutRef.current);
+      }
+
       if (dragCleanupRef.current) {
         dragCleanupRef.current();
       }
@@ -1135,6 +1176,16 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
       return;
     }
 
+    if (detailPanelExitTimeoutRef.current !== null) {
+      window.clearTimeout(detailPanelExitTimeoutRef.current);
+      detailPanelExitTimeoutRef.current = null;
+    }
+
+    if (detailPanelBackdropCloseTimeoutRef.current !== null) {
+      window.clearTimeout(detailPanelBackdropCloseTimeoutRef.current);
+      detailPanelBackdropCloseTimeoutRef.current = null;
+    }
+
     if (selectedRace?.slug === item.slug && isDetailPanelOpen) {
       return;
     }
@@ -1368,8 +1419,8 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
           key={`${selectedRace.slug}-${detailPanelInstance}`}
           race={selectedRace}
           isOpen={isDetailPanelOpen}
-          onClose={handleRaceClose}
-          onExited={() => setSelectedRace(null)}
+          onBackdropClose={handleBackdropClose}
+          onExited={clearDetailPanel}
         />
       ) : null}
     </main>
