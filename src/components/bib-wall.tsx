@@ -839,7 +839,7 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
   }, []);
 
   useEffect(() => {
-    if (!selectedRace) {
+    if (!selectedRace || !isDetailPanelOpen) {
       return;
     }
 
@@ -857,7 +857,7 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [handleRaceClose, selectedRace]);
+  }, [handleRaceClose, isDetailPanelOpen, selectedRace]);
 
   useEffect(() => {
     if (!hoveredListRace || !listContainerRef.current) {
