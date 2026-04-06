@@ -19,7 +19,8 @@ import { Tabs } from "@/components/ui/vercel-tabs";
 import type { RaceEntry } from "@/lib/race-types";
 
 const CARD_WIDTH = 290;
-const CANVAS_SPACING = 65;
+const CANVAS_HORIZONTAL_SPACING = 60;
+const CANVAS_VERTICAL_SPACING = 48;
 const MIN_GRID_COLUMNS = 4;
 const MAX_GRID_COLUMNS = 9;
 const MIN_TILE_WIDTH = 3400;
@@ -27,9 +28,10 @@ const TILE_OFFSETS = [-1, 0, 1];
 const PREVIEW_ASPECT_RATIO = 1.06 / 0.82;
 const PREVIEW_HEIGHT = CARD_WIDTH / PREVIEW_ASPECT_RATIO;
 const META_REVEAL_SPACE = 28;
-const TILE_GUTTER = CANVAS_SPACING / 2;
-const BOARD_INSET_X = TILE_GUTTER;
-const BOARD_INSET_Y = TILE_GUTTER;
+const TILE_GUTTER_X = CANVAS_HORIZONTAL_SPACING / 2;
+const TILE_GUTTER_Y = CANVAS_VERTICAL_SPACING / 2;
+const BOARD_INSET_X = TILE_GUTTER_X;
+const BOARD_INSET_Y = TILE_GUTTER_Y;
 const INERTIA_FRICTION = 0.92;
 const INERTIA_MIN_SPEED = 0.2;
 const DRAG_START_THRESHOLD = 6;
@@ -166,8 +168,8 @@ function getCardPosition(
 ) {
   const column = index % gridColumns;
   const row = Math.floor(index / gridColumns);
-  const columnStep = CARD_WIDTH + CANVAS_SPACING;
-  const rowStep = PREVIEW_HEIGHT + CANVAS_SPACING;
+  const columnStep = CARD_WIDTH + CANVAS_HORIZONTAL_SPACING;
+  const rowStep = PREVIEW_HEIGHT + CANVAS_VERTICAL_SPACING;
 
   return {
     x: BOARD_INSET_X + column * columnStep,
@@ -180,7 +182,10 @@ function getGridColumns(raceCount: number) {
   const maxColumns = Math.min(MAX_GRID_COLUMNS, raceCount);
   const widthPreferredColumns = Math.min(
     maxColumns,
-    Math.max(minColumns, Math.ceil(MIN_TILE_WIDTH / (CARD_WIDTH + CANVAS_SPACING)))
+    Math.max(
+      minColumns,
+      Math.ceil(MIN_TILE_WIDTH / (CARD_WIDTH + CANVAS_HORIZONTAL_SPACING))
+    )
   );
 
   let bestColumns = widthPreferredColumns;
@@ -752,9 +757,13 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
     return Array.from({ length: tileCellCount }, (_, index) => shuffledRaces[index % shuffledRaces.length]);
   }, [gridColumns, gridRows, shuffledRaces]);
   const canvasWidth =
-    BOARD_INSET_X * 2 + (gridColumns - 1) * (CARD_WIDTH + CANVAS_SPACING) + CARD_WIDTH;
+    BOARD_INSET_X * 2 +
+    (gridColumns - 1) * (CARD_WIDTH + CANVAS_HORIZONTAL_SPACING) +
+    CARD_WIDTH;
   const canvasHeight =
-    BOARD_INSET_Y * 2 + (gridRows - 1) * (PREVIEW_HEIGHT + CANVAS_SPACING) + PREVIEW_HEIGHT;
+    BOARD_INSET_Y * 2 +
+    (gridRows - 1) * (PREVIEW_HEIGHT + CANVAS_VERTICAL_SPACING) +
+    PREVIEW_HEIGHT;
   const filteredRaces = useMemo(
     () =>
       activeFilter === "All"
