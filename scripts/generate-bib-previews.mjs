@@ -9,8 +9,7 @@ const projectRoot = path.resolve(__dirname, "..");
 const racesDir = path.join(projectRoot, "races");
 
 const PREVIEW_WIDTH = 720;
-const PREVIEW_QUALITY = "70";
-const PREVIEW_SUFFIX = ".preview.jpg";
+const PREVIEW_SUFFIX = ".preview.png";
 
 function extractBibImage(markdownSource) {
   const match = markdownSource.match(/^bibImage:\s*(.+)$/m);
@@ -24,10 +23,7 @@ function runSips(inputPath, outputPath) {
       String(PREVIEW_WIDTH),
       "-s",
       "format",
-      "jpeg",
-      "-s",
-      "formatOptions",
-      PREVIEW_QUALITY,
+      "png",
       inputPath,
       "--out",
       outputPath,

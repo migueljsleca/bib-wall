@@ -117,9 +117,9 @@ async function resolveBibAssetPath(directoryName: string, assetPath: string | un
   const previewCandidates = [
     `${parsedPath.name}.preview.avif`,
     `${parsedPath.name}.preview.webp`,
+    `${parsedPath.name}.preview.png`,
     `${parsedPath.name}.preview.jpg`,
     `${parsedPath.name}.preview.jpeg`,
-    `${parsedPath.name}.preview.png`,
   ];
 
   for (const previewFileName of previewCandidates) {
