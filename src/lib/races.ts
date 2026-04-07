@@ -99,6 +99,41 @@ function toAssetUrl(slug: string, assetPath: string | undefined) {
   return `/race-assets/${encodeURIComponent(slug)}/${encodedPath}`;
 }
 
+async function pathExists(filePath: string) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function resolveBibAssetPath(directoryName: string, assetPath: string | undefined) {
+  if (!assetPath) {
+    return undefined;
+  }
+
+  const parsedPath = path.parse(assetPath);
+  const previewCandidates = [
+    `${parsedPath.name}.preview.avif`,
+    `${parsedPath.name}.preview.webp`,
+    `${parsedPath.name}.preview.jpg`,
+    `${parsedPath.name}.preview.jpeg`,
+    `${parsedPath.name}.preview.png`,
+  ];
+
+  for (const previewFileName of previewCandidates) {
+    const previewRelativePath = path.join(parsedPath.dir, previewFileName);
+    const previewAbsolutePath = path.join(RACES_DIR, directoryName, previewRelativePath);
+
+    if (await pathExists(previewAbsolutePath)) {
+      return toAssetUrl(directoryName, previewRelativePath);
+    }
+  }
+
+  return toAssetUrl(directoryName, assetPath);
+}
+
 async function readRaceDirectory(directoryName: string): Promise<RaceEntry> {
   const fullPath = path.join(RACES_DIR, directoryName, "index.md");
   const source = await fs.readFile(fullPath, "utf8");
@@ -125,7 +160,10 @@ async function readRaceDirectory(directoryName: string): Promise<RaceEntry> {
     distance: frontmatter.distance as string,
     elevation: frontmatter.elevation as string,
     date: frontmatter.date as string,
-    bibImage: toAssetUrl(directoryName, toOptionalString(frontmatter.bibImage)),
+    bibImage: await resolveBibAssetPath(
+      directoryName,
+      toOptionalString(frontmatter.bibImage)
+    ),
     gpxFile: toAssetUrl(directoryName, toOptionalString(frontmatter.gpxFile)),
     photos: toStringArray(frontmatter.photos).map((photo) => toAssetUrl(directoryName, photo)!),
     notes: content,
