@@ -8,6 +8,7 @@ bibImage: bib.png
 gpxFile: Meio_KV_Calheta(1).gpx
 photos:
   - image.jpg
+  - image-2.jpg
 ---
 
 Super steep stairs right on the beginning!
