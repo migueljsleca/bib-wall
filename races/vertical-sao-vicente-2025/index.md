@@ -2,12 +2,14 @@
 raceName: KV São Vicente
 raceType: VK
 distance: 2.9km
-elevation: 1000m
+elevation: 10400m
 date: 08/06/2025
 bibImage: vertical-sao-vicente-2025.png
 ---
 
 First time doing a Vertical Kilometer race.
+
+01:00:59
 
 Its nice to do a short race for a change.
 
