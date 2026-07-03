@@ -7,4 +7,4 @@ date: 28/09/2025
 bibImage: vertical-costa-norte-2025.png
 ---
 
-Not 1000m elevation due to fires destrying a bit of the trails.
+Not 1000m elevation due to fires destroying a bit of the trails.
