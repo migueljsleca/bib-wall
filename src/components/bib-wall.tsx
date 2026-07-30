@@ -1,29 +1,46 @@
 "use client";
 
-import NumberFlow, { NumberFlowGroup } from "@number-flow/react";
 import Image from "next/image";
 import {
   Fragment,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type CSSProperties,
-  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
   type ReactNode,
   type Ref,
 } from "react";
 
-import { Tabs } from "@/components/ui/vercel-tabs";
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import {
+  CollectionHeader,
+  type WallView,
+} from "@/components/collection-header";
+import { RaceTypeTag } from "@/components/race-type-tag";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { createTiledItems, getGridColumns } from "@/lib/bib-grid";
+import {
+  formatRaceDate,
+  getDistancePrecision,
+  parseMetricValue,
+  parseRaceDate,
+} from "@/lib/race-format";
 import type { RaceEntry } from "@/lib/race-types";
 
 const CARD_WIDTH = 290;
 const CANVAS_HORIZONTAL_SPACING = 60;
 const CANVAS_VERTICAL_SPACING = 48;
-const MIN_GRID_COLUMNS = 4;
-const MAX_GRID_COLUMNS = 9;
-const MIN_TILE_WIDTH = 3400;
 const TILE_OFFSETS = [-1, 0, 1];
 const PREVIEW_ASPECT_RATIO = 1.06 / 0.82;
 const PREVIEW_HEIGHT = CARD_WIDTH / PREVIEW_ASPECT_RATIO;
@@ -36,53 +53,20 @@ const INERTIA_FRICTION = 0.92;
 const INERTIA_MIN_SPEED = 0.2;
 const DRAG_START_THRESHOLD = 6;
 const INITIAL_OFFSET = { x: -160, y: -120 };
-const DETAIL_PANEL_TRANSITION_MS = 350;
-const DETAIL_PANEL_EASING = "cubic-bezier(0.22,1,0.36,1)";
-const DETAIL_PANEL_BACKDROP_CLOSE_DELAY_MS = 60;
 const FILTERS = ["All", "Trail", "Road", "Sky", "VK"] as const;
 const SORT_FIELDS = ["date", "distance", "elevation"] as const;
+const FILTER_OPTIONS = FILTERS.map((filter) => ({
+  id: filter,
+  label: filter === "VK" ? filter : filter[0] + filter.slice(1).toLowerCase(),
+}));
+const SORT_OPTIONS = SORT_FIELDS.map((field) => ({
+  id: field,
+  label: field === "date" ? "Date" : field === "distance" ? "Distance" : "Elevation",
+}));
 const INLINE_LINK_PATTERN = /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s]+)/g;
 
 type SortField = (typeof SORT_FIELDS)[number];
 type SortDirection = "asc" | "desc";
-
-function parseMetricValue(value: string, unit: "km" | "m") {
-  const match = value.trim().toLowerCase().match(new RegExp(`([\\d.]+)\\s*${unit}$`));
-
-  if (!match) {
-    return 0;
-  }
-
-  return Number.parseFloat(match[1]) || 0;
-}
-
-function getDistancePrecision(value: number) {
-  return Number.isInteger(value) ? 0 : 1;
-}
-
-function parseRaceDate(value: string) {
-  const [day, month, year] = value.split("/").map((part) => Number.parseInt(part, 10));
-
-  if (!day || !month || !year) {
-    return 0;
-  }
-
-  return new Date(year, month - 1, day).getTime();
-}
-
-function formatRaceDate(value: string) {
-  const timestamp = parseRaceDate(value);
-
-  if (!timestamp) {
-    return value;
-  }
-
-  return new Intl.DateTimeFormat("en-US", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  }).format(timestamp);
-}
 
 function wrapOffset(value: number, size: number) {
   const half = size / 2;
@@ -110,30 +94,6 @@ function ElevationIcon() {
     >
       <path d="M240,56v64a8,8,0,0,1-16,0V75.31l-82.34,82.35a8,8,0,0,1-11.32,0L96,123.31,29.66,189.66a8,8,0,0,1-11.32-11.32l72-72a8,8,0,0,1,11.32,0L136,140.69,212.69,64H168a8,8,0,0,1,0-16h64A8,8,0,0,1,240,56Z" />
     </svg>
-  );
-}
-
-function GridIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 256 256" className="size-4.5 fill-current">
-      <path d="M76,60A16,16,0,1,1,60,44,16,16,0,0,1,76,60Zm52-16a16,16,0,1,0,16,16A16,16,0,0,0,128,44Zm68,32a16,16,0,1,0-16-16A16,16,0,0,0,196,76ZM60,112a16,16,0,1,0,16,16A16,16,0,0,0,60,112Zm68,0a16,16,0,1,0,16,16A16,16,0,0,0,128,112Zm68,0a16,16,0,1,0,16,16A16,16,0,0,0,196,112ZM60,180a16,16,0,1,0,16,16A16,16,0,0,0,60,180Zm68,0a16,16,0,1,0,16,16A16,16,0,0,0,128,180Zm68,0a16,16,0,1,0,16,16A16,16,0,0,0,196,180Z" />
-    </svg>
-  );
-}
-
-function ListIcon() {
-  return (
-    <svg aria-hidden="true" viewBox="0 0 256 256" className="size-4.5 fill-current">
-      <path d="M84,64A12,12,0,0,1,96,52H216a12,12,0,0,1,0,24H96A12,12,0,0,1,84,64Zm132,52H96a12,12,0,0,0,0,24H216a12,12,0,0,0,0-24Zm0,64H96a12,12,0,0,0,0,24H216a12,12,0,0,0,0-24ZM56,52H40a12,12,0,0,0,0,24H56a12,12,0,0,0,0-24Zm0,64H40a12,12,0,0,0,0,24H56a12,12,0,0,0,0-24Zm0,64H40a12,12,0,0,0,0,24H56a12,12,0,0,0,0-24Z" />
-    </svg>
-  );
-}
-
-function NavStatTooltip({ label }: { label: string }) {
-  return (
-    <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 -translate-x-1/2 whitespace-nowrap rounded-[6px] border border-border/70 bg-background/95 px-2 py-1 font-mono text-[12px] normal-case text-foreground opacity-0 shadow-sm transition duration-150 group-hover:opacity-100">
-      {label}
-    </span>
   );
 }
 
@@ -176,34 +136,6 @@ function getCardPosition(
     x: BOARD_INSET_X + column * columnStep,
     y: BOARD_INSET_Y + row * rowStep,
   };
-}
-
-function getGridColumns(raceCount: number) {
-  const minColumns = Math.min(MIN_GRID_COLUMNS, raceCount);
-  const maxColumns = Math.min(MAX_GRID_COLUMNS, raceCount);
-  const widthPreferredColumns = Math.min(
-    maxColumns,
-    Math.max(
-      minColumns,
-      Math.ceil(MIN_TILE_WIDTH / (CARD_WIDTH + CANVAS_HORIZONTAL_SPACING))
-    )
-  );
-
-  let bestColumns = widthPreferredColumns;
-  let bestScore = Number.POSITIVE_INFINITY;
-
-  for (let columns = widthPreferredColumns; columns <= maxColumns; columns += 1) {
-    const repeatedCells = (columns - (raceCount % columns)) % columns;
-    const preferredWidthPenalty = Math.abs(columns - widthPreferredColumns);
-    const score = repeatedCells * 100 + preferredWidthPenalty * 10;
-
-    if (score < bestScore) {
-      bestScore = score;
-      bestColumns = columns;
-    }
-  }
-
-  return bestColumns;
 }
 
 function getStableShuffleValue(value: string) {
@@ -369,57 +301,83 @@ function GalleryCard({
   x,
   y,
   onOpen,
+  interactive,
 }: {
   item: RaceEntry;
   x: number;
   y: number;
-  onOpen: (item: RaceEntry) => void;
+  onOpen: (item: RaceEntry, trigger?: HTMLButtonElement) => void;
+  interactive: boolean;
 }) {
+  const className =
+    "group absolute w-[290px] cursor-pointer select-none text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/50 focus-visible:ring-offset-4 focus-visible:ring-offset-background";
+  const style = {
+    left: `${x}px`,
+    top: `${y}px`,
+    height: `${PREVIEW_HEIGHT + META_REVEAL_SPACE}px`,
+  };
+  const content = (
+    <div className="relative h-full overflow-visible">
+      <div className="absolute inset-x-0 top-0 translate-x-0 translate-y-0 transform-gpu transition-transform duration-200 ease-out group-hover:-translate-y-4 group-focus-visible:-translate-y-4">
+        <div className="relative aspect-[1.06/0.82] w-full overflow-hidden">
+          <RacePreview image={item.bibImage} raceName={item.raceName} />
+        </div>
+      </div>
+
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 translate-y-2 transform-gpu opacity-0 transition-[transform,opacity] duration-200 ease-out group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <h2 className="truncate text-[14px] text-foreground">{item.raceName}</h2>
+          </div>
+          <RaceTypeTag
+            type={item.raceType}
+            className="shrink-0 px-1.5 py-0.5 text-[11px] leading-4"
+          />
+        </div>
+
+        <div className="mt-0.5 flex items-start justify-between gap-4 text-sm text-muted-foreground">
+          <div className="flex items-center gap-5">
+            <span className="inline-flex items-center gap-2">
+              <DistanceIcon />
+              {item.distance}
+            </span>
+            <span className="inline-flex items-center gap-2">
+              <ElevationIcon />
+              {item.elevation}
+            </span>
+          </div>
+          <div className="shrink-0 text-right">{formatRaceDate(item.date)}</div>
+        </div>
+      </div>
+    </div>
+  );
+
+  if (!interactive) {
+    return (
+      <div
+        aria-hidden="true"
+        data-race-card=""
+        className={className}
+        onDragStart={(event) => event.preventDefault()}
+        onClick={() => onOpen(item)}
+        style={style}
+      >
+        {content}
+      </div>
+    );
+  }
+
   return (
     <button
       type="button"
-      className="group absolute w-[290px] cursor-pointer select-none text-left"
+      data-race-card=""
+      className={className}
       onDragStart={(event) => event.preventDefault()}
-      onClick={() => onOpen(item)}
+      onClick={(event) => onOpen(item, event.currentTarget)}
       aria-label={`Open ${item.raceName} details`}
-      style={{
-        left: `${x}px`,
-        top: `${y}px`,
-        height: `${PREVIEW_HEIGHT + META_REVEAL_SPACE}px`,
-      }}
+      style={style}
     >
-      <div className="relative h-full overflow-visible">
-        <div className="absolute inset-x-0 top-0 translate-x-0 translate-y-0 transform-gpu transition-transform duration-200 ease-out will-change-transform group-hover:-translate-y-4">
-          <div className="relative aspect-[1.06/0.82] w-full overflow-hidden">
-            <RacePreview image={item.bibImage} raceName={item.raceName} />
-          </div>
-        </div>
-
-        <div className="pointer-events-none absolute inset-x-0 bottom-0 translate-y-2 transform-gpu opacity-0 transition-[transform,opacity] duration-200 ease-out will-change-transform group-hover:translate-y-0 group-hover:opacity-100">
-          <div className="flex items-start justify-between gap-4">
-            <div className="min-w-0">
-              <h2 className="truncate text-[14px] text-foreground">{item.raceName}</h2>
-            </div>
-            <div className="shrink-0 text-right text-[14px] text-foreground">
-              {item.raceType}
-            </div>
-          </div>
-
-          <div className="mt-0.5 flex items-start justify-between gap-4 text-sm text-muted-foreground">
-            <div className="flex items-center gap-5">
-              <span className="inline-flex items-center gap-2">
-                <DistanceIcon />
-                {item.distance}
-              </span>
-              <span className="inline-flex items-center gap-2">
-                <ElevationIcon />
-                {item.elevation}
-              </span>
-            </div>
-            <div className="shrink-0 text-right">{formatRaceDate(item.date)}</div>
-          </div>
-        </div>
-      </div>
+      {content}
     </button>
   );
 }
@@ -433,25 +391,25 @@ function ListRow({
 }: {
   item: RaceEntry;
   index: number;
-  onOpen: (item: RaceEntry) => void;
+  onOpen: (item: RaceEntry, trigger?: HTMLButtonElement) => void;
   rowRef?: Ref<HTMLButtonElement>;
   onHoverStart?: () => void;
 }) {
   return (
     <button
       type="button"
-      onClick={() => onOpen(item)}
+      onClick={(event) => onOpen(item, event.currentTarget)}
       ref={rowRef}
       onMouseEnter={onHoverStart}
-      className="relative z-10 -mx-4 flex w-[calc(100%+2rem)] animate-[list-row-enter_680ms_cubic-bezier(0.22,1,0.36,1)] items-center gap-6 rounded-[8px] px-2 py-3 text-left opacity-0 transition-colors [animation-delay:var(--row-delay)] [animation-fill-mode:forwards] hover:text-foreground sm:-mx-5 sm:w-[calc(100%+2.5rem)] sm:px-3 sm:py-3"
-      style={{ "--row-delay": `${Math.min(index, 8) * 45}ms` } as CSSProperties}
+      className="relative z-10 -mx-2 flex w-[calc(100%+1rem)] animate-[list-row-enter_260ms_cubic-bezier(0.22,1,0.36,1)] items-center gap-4 rounded-[8px] px-2 py-3 text-left opacity-0 transition-colors [animation-delay:var(--row-delay)] [animation-fill-mode:forwards] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/35 sm:-mx-5 sm:w-[calc(100%+2.5rem)] sm:gap-6 sm:px-3 sm:py-3"
+      style={{ "--row-delay": `${Math.min(index, 5) * 25}ms` } as CSSProperties}
       aria-label={`Open ${item.raceName} details`}
     >
-      <div className="w-[112px] shrink-0">
+      <div className="w-[92px] shrink-0 sm:w-[112px]">
         <RacePreview image={item.bibImage} raceName={item.raceName} />
       </div>
 
-      <div className="flex min-w-0 flex-1 items-start justify-between gap-6">
+      <div className="flex min-w-0 flex-1 items-start justify-between gap-3 sm:gap-6">
         <div className="min-w-0">
           <h2 className="truncate text-[14px] text-foreground">{item.raceName}</h2>
 
@@ -467,9 +425,9 @@ function ListRow({
           </div>
         </div>
 
-        <div className="shrink-0 text-right">
-          <p className="text-[14px] text-foreground">{item.raceType}</p>
-          <p className="mt-0.5 text-sm text-muted-foreground">{formatRaceDate(item.date)}</p>
+        <div className="hidden shrink-0 flex-col items-end text-right min-[380px]:flex">
+          <RaceTypeTag type={item.raceType} />
+          <p className="mt-1 text-sm text-muted-foreground">{formatRaceDate(item.date)}</p>
         </div>
       </div>
     </button>
@@ -479,82 +437,59 @@ function ListRow({
 function RaceDetailPanel({
   race,
   isOpen,
-  onBackdropClose,
-  onExited,
+  onOpenChange,
+  onCloseAutoFocus,
 }: {
   race: RaceEntry;
   isOpen: boolean;
-  onBackdropClose: () => void;
-  onExited: () => void;
+  onOpenChange: (open: boolean) => void;
+  onCloseAutoFocus: () => void;
 }) {
   const storyBlocks = getStoryBlocks(race.notes);
   const hasPhotos = race.photos.length > 0;
   const hasRoute = Boolean(race.gpxFile);
   const hasContent = storyBlocks.length > 0 || hasPhotos || hasRoute;
   const [activePhotoIndex, setActivePhotoIndex] = useState(0);
-  const transitionDuration = `${DETAIL_PANEL_TRANSITION_MS}ms`;
 
   return (
-    <div className="fixed inset-0 z-30 pointer-events-auto">
-      <button
-        type="button"
-        aria-label="Close race details"
-        className={`absolute inset-0 bg-background/72 backdrop-blur-[2px] ${
-          isOpen ? "animate-[detail-backdrop-enter_350ms_cubic-bezier(0.22,1,0.36,1)]" : ""
-        } transition-opacity ${
-          isOpen ? "opacity-100" : "opacity-0"
-        }`}
-        style={{
-          transitionDuration,
-          transitionTimingFunction: DETAIL_PANEL_EASING,
+    <Sheet open={isOpen} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        showCloseButton={false}
+        aria-modal="true"
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          onCloseAutoFocus();
         }}
-        onClick={onBackdropClose}
-      />
-
-      <aside className="pointer-events-none absolute inset-x-4 inset-y-4 flex justify-end">
-        <div
-          className={`pointer-events-auto flex h-full max-h-full w-full max-w-[460px] transform-gpu flex-col overflow-hidden rounded-[4px] border border-border/70 bg-[color:color-mix(in_oklab,var(--background)_88%,white_12%)] shadow-[0_24px_80px_rgba(15,15,15,0.12)] backdrop-blur-xl ${
-            isOpen ? "animate-[detail-panel-enter_350ms_cubic-bezier(0.22,1,0.36,1)]" : ""
-          } transition-transform ${
-            isOpen ? "translate-x-0" : "translate-x-[calc(100%+1.5rem)]"
-          }`}
-          style={{
-            transitionDuration,
-            transitionTimingFunction: DETAIL_PANEL_EASING,
-          }}
-          onTransitionEnd={(event) => {
-            if (event.target !== event.currentTarget || event.propertyName !== "transform" || isOpen) {
-              return;
-            }
-
-            onExited();
-          }}
-          onClick={(event) => event.stopPropagation()}
-        >
-          <div className="flex items-start justify-between gap-4 border-b border-border/70 px-5 pt-5 pb-4">
+        className="overflow-hidden border-border/70 bg-[color:color-mix(in_oklab,var(--background)_88%,white_12%)] shadow-[0_24px_80px_rgba(15,15,15,0.12)] data-[side=right]:inset-y-4 data-[side=right]:right-4 data-[side=right]:h-[calc(100%-2rem)] data-[side=right]:w-[calc(100%-2rem)] data-[side=right]:max-w-[460px] data-[side=right]:rounded-[4px] data-[side=right]:border"
+      >
+          <SheetHeader className="flex-row items-start justify-between gap-4 border-b border-border/70 px-5 pt-5 pb-4">
             <div className="min-w-0">
               <p className="text-sm uppercase text-muted-foreground">
                 Race Notes
               </p>
-              <h2 className="mt-2 text-sm text-foreground">{race.raceName}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">{formatRaceDate(race.date)}</p>
+              <SheetTitle className="mt-2 font-normal">{race.raceName}</SheetTitle>
+              <SheetDescription className="mt-1 text-sm">
+                {formatRaceDate(race.date)}
+              </SheetDescription>
             </div>
 
-            <button
-              type="button"
-              onClick={onBackdropClose}
-              aria-label="Close details panel"
-              className="inline-flex size-9 shrink-0 items-center justify-center border border-border/70 text-muted-foreground transition hover:bg-muted hover:text-foreground"
-            >
-              <CloseIcon />
-            </button>
-          </div>
+            <SheetClose asChild>
+              <button
+                type="button"
+                aria-label="Close details panel"
+                className="inline-flex size-10 shrink-0 items-center justify-center border border-border/70 text-muted-foreground transition-[background-color,color,transform] hover:bg-muted hover:text-foreground active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+              >
+                <CloseIcon />
+              </button>
+            </SheetClose>
+          </SheetHeader>
 
           <div className="min-h-0 flex-1 overflow-y-auto">
             <div className="space-y-6 pb-5">
               <div className="grid gap-0 border-x border-b border-border/70 sm:grid-cols-[minmax(0,1fr)_176px]">
-                <div className="relative flex items-center justify-center overflow-hidden bg-muted/65 p-5">
-                  <div className="relative mx-auto w-[88%]">
+                <div className="relative flex items-center justify-center overflow-hidden bg-muted/65 p-4">
+                  <div className="relative mx-auto w-[94%]">
                     <RacePreview image={race.bibImage} raceName={race.raceName} />
                   </div>
                 </div>
@@ -562,7 +497,7 @@ function RaceDetailPanel({
                 <div className="grid h-full grid-cols-1 divide-y divide-border/70 border-l border-border/70 text-sm text-muted-foreground">
                   <div className="bg-background px-3 py-3">
                     <p>Type</p>
-                    <p className="mt-1 text-sm tracking-normal text-foreground">{race.raceType}</p>
+                    <RaceTypeTag type={race.raceType} className="mt-1" />
                   </div>
                   <div className="bg-background px-3 py-3">
                     <p>Distance</p>
@@ -688,21 +623,25 @@ function RaceDetailPanel({
               </div>
             </div>
           </div>
-        </div>
-      </aside>
-
-    </div>
+      </SheetContent>
+    </Sheet>
   );
 }
 
-export function BibWall({ races }: { races: RaceEntry[] }) {
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+export function BibWall({
+  races,
+  initialView = "grid",
+}: {
+  races: RaceEntry[];
+  initialView?: WallView;
+}) {
+  const [viewMode, setViewMode] = useState<WallView>(initialView);
+  const [animateCanvasEntry, setAnimateCanvasEntry] = useState(false);
   const [activeFilter, setActiveFilter] = useState("All");
   const [sortField, setSortField] = useState<SortField>("date");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [selectedRace, setSelectedRace] = useState<RaceEntry | null>(null);
   const [isDetailPanelOpen, setIsDetailPanelOpen] = useState(false);
-  const [detailPanelInstance, setDetailPanelInstance] = useState(0);
   const [hoveredListRace, setHoveredListRace] = useState<string | null>(null);
   const [listHoverStyle, setListHoverStyle] = useState<CSSProperties>({
     top: "0px",
@@ -710,18 +649,25 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
     width: "0px",
     height: "0px",
   });
-  const [isDragging, setIsDragging] = useState(false);
-  const sectionRef = useRef<HTMLElement | null>(null);
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const listContainerRef = useRef<HTMLDivElement | null>(null);
   const listRowRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const sortScrollerRef = useRef<HTMLDivElement | null>(null);
+  const sortButtonRefs = useRef<Record<SortField, HTMLButtonElement | null>>({
+    date: null,
+    distance: null,
+    elevation: null,
+  });
+  const detailTriggerRef = useRef<HTMLButtonElement | null>(null);
   const offsetRef = useRef(INITIAL_OFFSET);
   const dragStateRef = useRef<{
+    pointerId: number;
     clientX: number;
     clientY: number;
     startX: number;
     startY: number;
     hasMoved: boolean;
+    surface: HTMLElement;
   } | null>(null);
   const velocityRef = useRef({ x: 0, y: 0 });
   const lastPointerRef = useRef<{
@@ -730,10 +676,11 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
     time: number;
   } | null>(null);
   const inertiaFrameRef = useRef<number | null>(null);
+  const dragFrameRef = useRef<number | null>(null);
+  const drawerOpenFrameRef = useRef<number | null>(null);
+  const pendingDragOffsetRef = useRef<{ x: number; y: number } | null>(null);
   const dragCleanupRef = useRef<(() => void) | null>(null);
   const suppressClickRef = useRef(false);
-  const detailPanelExitTimeoutRef = useRef<number | null>(null);
-  const detailPanelBackdropCloseTimeoutRef = useRef<number | null>(null);
 
   const shuffledRaces = useMemo(() => {
     const items = [...races];
@@ -753,10 +700,10 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
   }, [races]);
   const gridColumns = Math.max(1, getGridColumns(races.length));
   const gridRows = Math.max(Math.ceil(races.length / gridColumns), GRID_ROWS_FALLBACK);
-  const tiledRaces = useMemo(() => {
-    const tileCellCount = gridColumns * gridRows;
-    return Array.from({ length: tileCellCount }, (_, index) => shuffledRaces[index % shuffledRaces.length]);
-  }, [gridColumns, gridRows, shuffledRaces]);
+  const tiledRaces = useMemo(
+    () => createTiledItems(shuffledRaces, gridColumns, gridRows),
+    [gridColumns, gridRows, shuffledRaces]
+  );
   const canvasWidth =
     BOARD_INSET_X * 2 +
     (gridColumns - 1) * (CARD_WIDTH + CANVAS_HORIZONTAL_SPACING) +
@@ -804,61 +751,9 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
     0
   );
   const distancePrecision = getDistancePrecision(totalDistance);
-  const filterTabs = useMemo(
-    () =>
-      FILTERS.map((filter) => ({
-        id: filter,
-        label: filter === "VK" ? filter : filter[0] + filter.slice(1).toLowerCase(),
-      })),
-    []
-  );
-  const sortOptions = useMemo(
-    () =>
-      SORT_FIELDS.map((field) => ({
-        id: field,
-        label: field === "date" ? "Date" : field === "distance" ? "Distance" : "Elevation",
-      })),
-    []
-  );
   const [animatedCount, setAnimatedCount] = useState(0);
   const [animatedDistance, setAnimatedDistance] = useState(0);
   const [animatedElevation, setAnimatedElevation] = useState(0);
-  const [listAnimationCycle, setListAnimationCycle] = useState(0);
-  const clearDetailPanel = useCallback(() => {
-    if (detailPanelExitTimeoutRef.current !== null) {
-      window.clearTimeout(detailPanelExitTimeoutRef.current);
-      detailPanelExitTimeoutRef.current = null;
-    }
-
-    setSelectedRace(null);
-  }, []);
-  const handleRaceClose = useCallback(() => {
-    if (detailPanelBackdropCloseTimeoutRef.current !== null) {
-      window.clearTimeout(detailPanelBackdropCloseTimeoutRef.current);
-      detailPanelBackdropCloseTimeoutRef.current = null;
-    }
-
-    if (detailPanelExitTimeoutRef.current !== null) {
-      window.clearTimeout(detailPanelExitTimeoutRef.current);
-    }
-
-    setIsDetailPanelOpen(false);
-
-    detailPanelExitTimeoutRef.current = window.setTimeout(() => {
-      detailPanelExitTimeoutRef.current = null;
-      setSelectedRace(null);
-    }, DETAIL_PANEL_TRANSITION_MS + 60);
-  }, []);
-  const handleBackdropClose = useCallback(() => {
-    if (detailPanelBackdropCloseTimeoutRef.current !== null) {
-      window.clearTimeout(detailPanelBackdropCloseTimeoutRef.current);
-    }
-
-    detailPanelBackdropCloseTimeoutRef.current = window.setTimeout(() => {
-      detailPanelBackdropCloseTimeoutRef.current = null;
-      handleRaceClose();
-    }, DETAIL_PANEL_BACKDROP_CLOSE_DELAY_MS);
-  }, [handleRaceClose]);
 
   useEffect(() => {
     document.documentElement.dataset.viewMode = viewMode;
@@ -870,14 +765,6 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
 
   useEffect(() => {
     return () => {
-      if (detailPanelBackdropCloseTimeoutRef.current !== null) {
-        window.clearTimeout(detailPanelBackdropCloseTimeoutRef.current);
-      }
-
-      if (detailPanelExitTimeoutRef.current !== null) {
-        window.clearTimeout(detailPanelExitTimeoutRef.current);
-      }
-
       if (dragCleanupRef.current) {
         dragCleanupRef.current();
       }
@@ -885,29 +772,18 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
       if (inertiaFrameRef.current !== null) {
         cancelAnimationFrame(inertiaFrameRef.current);
       }
+
+      if (dragFrameRef.current !== null) {
+        cancelAnimationFrame(dragFrameRef.current);
+      }
+
+      if (drawerOpenFrameRef.current !== null) {
+        cancelAnimationFrame(drawerOpenFrameRef.current);
+      }
+
+      delete document.documentElement.dataset.detailPanelOpen;
     };
   }, []);
-
-  useEffect(() => {
-    if (!selectedRace || !isDetailPanelOpen) {
-      return;
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        handleRaceClose();
-      }
-    };
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", handleKeyDown);
-    };
-  }, [handleRaceClose, isDetailPanelOpen, selectedRace]);
 
   useEffect(() => {
     if (!hoveredListRace || !listContainerRef.current) {
@@ -951,6 +827,48 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
   }, [hoveredListRace, sortedRaces]);
 
   useEffect(() => {
+    const scroller = sortScrollerRef.current;
+    const activeButton = sortButtonRefs.current[sortField];
+
+    if (!scroller || !activeButton) {
+      return;
+    }
+
+    let frameId: number | null = null;
+    const keepActiveSortVisible = () => {
+      if (frameId !== null) {
+        cancelAnimationFrame(frameId);
+      }
+
+      frameId = requestAnimationFrame(() => {
+        frameId = null;
+        const scrollerBounds = scroller.getBoundingClientRect();
+        const buttonBounds = activeButton.getBoundingClientRect();
+        const edgeInset = 8;
+
+        if (buttonBounds.right > scrollerBounds.right - edgeInset) {
+          scroller.scrollLeft += buttonBounds.right - scrollerBounds.right + edgeInset;
+        } else if (buttonBounds.left < scrollerBounds.left + edgeInset) {
+          scroller.scrollLeft -= scrollerBounds.left - buttonBounds.left + edgeInset;
+        }
+      });
+    };
+
+    keepActiveSortVisible();
+
+    const resizeObserver = new ResizeObserver(keepActiveSortVisible);
+    resizeObserver.observe(activeButton);
+
+    return () => {
+      resizeObserver.disconnect();
+
+      if (frameId !== null) {
+        cancelAnimationFrame(frameId);
+      }
+    };
+  }, [sortDirection, sortField]);
+
+  useEffect(() => {
     const frame = requestAnimationFrame(() => {
       setAnimatedCount(displayedRaces.length);
       setAnimatedDistance(totalDistance);
@@ -962,12 +880,20 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
     };
   }, [displayedRaces.length, totalDistance, totalElevation]);
 
+  const setCanvasCompositing = useCallback((active: boolean) => {
+    if (canvasRef.current) {
+      canvasRef.current.style.willChange = active ? "transform" : "auto";
+    }
+  }, []);
+
   const stopInertia = useCallback(() => {
     if (inertiaFrameRef.current !== null) {
       cancelAnimationFrame(inertiaFrameRef.current);
       inertiaFrameRef.current = null;
     }
-  }, []);
+
+    setCanvasCompositing(false);
+  }, [setCanvasCompositing]);
 
   const applyCanvasTransform = useCallback((nextOffset: { x: number; y: number }) => {
     if (!canvasRef.current) {
@@ -994,8 +920,66 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
     setCanvasOffset(offsetRef.current);
   }, [canvasHeight, canvasWidth, setCanvasOffset]);
 
+  useLayoutEffect(() => {
+    if (viewMode !== "grid" || !animateCanvasEntry || !canvasRef.current) {
+      return;
+    }
+
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const visibleTiles = Array.from(
+      canvasRef.current.querySelectorAll<HTMLElement>("[data-canvas-tile]")
+    )
+      .map((tile) => ({ tile, rect: tile.getBoundingClientRect() }))
+      .filter(
+        ({ rect }) =>
+          rect.right > 0 &&
+          rect.left < viewportWidth &&
+          rect.bottom > 57 &&
+          rect.top < viewportHeight
+      );
+    const cards = visibleTiles
+      .flatMap(({ tile }) =>
+        Array.from(tile.querySelectorAll<HTMLElement>("[data-race-card]"))
+      )
+      .map((card) => ({ card, rect: card.getBoundingClientRect() }))
+      .filter(
+        ({ rect }) =>
+          rect.right > 0 &&
+          rect.left < viewportWidth &&
+          rect.bottom > 57 &&
+          rect.top < viewportHeight
+      )
+      .sort((left, right) => {
+        const rowDifference = left.rect.top - right.rect.top;
+
+        return Math.abs(rowDifference) > 40
+          ? rowDifference
+          : left.rect.left - right.rect.left;
+      });
+
+    cards.forEach(({ card }, index) => {
+      card.dataset.canvasEnter = "";
+      card.style.setProperty("--canvas-entry-delay", `${Math.min(index, 7) * 28}ms`);
+    });
+
+    const cleanupAnimationStyles = () => {
+      cards.forEach(({ card }) => {
+        delete card.dataset.canvasEnter;
+        card.style.removeProperty("--canvas-entry-delay");
+      });
+    };
+    const cleanupTimer = window.setTimeout(cleanupAnimationStyles, 480);
+
+    return () => {
+      window.clearTimeout(cleanupTimer);
+      cleanupAnimationStyles();
+    };
+  }, [animateCanvasEntry, viewMode]);
+
   const startInertia = useCallback(() => {
     stopInertia();
+    setCanvasCompositing(true);
 
     const step = () => {
       velocityRef.current = {
@@ -1008,6 +992,7 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
         Math.abs(velocityRef.current.y) < INERTIA_MIN_SPEED
       ) {
         inertiaFrameRef.current = null;
+        setCanvasCompositing(false);
         return;
       }
 
@@ -1020,7 +1005,7 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
     };
 
     inertiaFrameRef.current = requestAnimationFrame(step);
-  }, [setCanvasOffset, stopInertia]);
+  }, [setCanvasCompositing, setCanvasOffset, stopInertia]);
 
   const endPointerDrag = useCallback(() => {
     if (!dragStateRef.current) {
@@ -1028,32 +1013,46 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
     }
 
     suppressClickRef.current = dragStateRef.current.hasMoved;
+    delete dragStateRef.current.surface.dataset.dragging;
     dragStateRef.current = null;
     lastPointerRef.current = null;
-    setIsDragging(false);
 
     if (suppressClickRef.current) {
+      window.setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 0);
       startInertia();
       return;
     }
 
     velocityRef.current = { x: 0, y: 0 };
-  }, [startInertia]);
+    setCanvasCompositing(false);
+  }, [setCanvasCompositing, startInertia]);
 
-  function handlePointerDown(event: ReactMouseEvent<HTMLElement>) {
-    if (event.button !== 0) {
+  function handlePointerDown(event: ReactPointerEvent<HTMLElement>) {
+    if (!event.isPrimary || event.button !== 0) {
       return;
     }
 
-    event.preventDefault();
+    const dragSurface = event.currentTarget;
+    const previousUserSelect = document.body.style.userSelect;
     stopInertia();
+    setCanvasCompositing(true);
+
+    if (dragFrameRef.current !== null) {
+      cancelAnimationFrame(dragFrameRef.current);
+      dragFrameRef.current = null;
+    }
+    pendingDragOffsetRef.current = null;
 
     dragStateRef.current = {
+      pointerId: event.pointerId,
       clientX: event.clientX,
       clientY: event.clientY,
       startX: offsetRef.current.x,
       startY: offsetRef.current.y,
       hasMoved: false,
+      surface: dragSurface,
     };
     velocityRef.current = { x: 0, y: 0 };
     lastPointerRef.current = {
@@ -1062,13 +1061,34 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
       time: performance.now(),
     };
 
-    const handlePointerMove = (nativeEvent: MouseEvent) => {
-      if (!dragStateRef.current) {
+    const flushPendingDragOffset = () => {
+      const pendingOffset = pendingDragOffsetRef.current;
+
+      if (!pendingOffset) {
         return;
       }
 
-      if (nativeEvent.cancelable) {
-        nativeEvent.preventDefault();
+      pendingDragOffsetRef.current = null;
+      setCanvasOffset(pendingOffset);
+    };
+
+    const scheduleCanvasUpdate = () => {
+      if (dragFrameRef.current !== null) {
+        return;
+      }
+
+      dragFrameRef.current = requestAnimationFrame(() => {
+        dragFrameRef.current = null;
+        flushPendingDragOffset();
+      });
+    };
+
+    const handlePointerMove = (nativeEvent: PointerEvent) => {
+      if (
+        !dragStateRef.current ||
+        nativeEvent.pointerId !== dragStateRef.current.pointerId
+      ) {
+        return;
       }
 
       const deltaX = nativeEvent.clientX - dragStateRef.current.clientX;
@@ -1083,7 +1103,16 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
 
       if (!dragStateRef.current.hasMoved) {
         dragStateRef.current.hasMoved = true;
-        setIsDragging(true);
+        dragStateRef.current.surface.dataset.dragging = "";
+        document.body.style.userSelect = "none";
+
+        if (!dragSurface.hasPointerCapture(nativeEvent.pointerId)) {
+          dragSurface.setPointerCapture(nativeEvent.pointerId);
+        }
+      }
+
+      if (nativeEvent.cancelable) {
+        nativeEvent.preventDefault();
       }
 
       if (previousPointer) {
@@ -1096,10 +1125,11 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
         };
       }
 
-      setCanvasOffset({
+      pendingDragOffsetRef.current = {
         x: dragStateRef.current.startX + deltaX,
         y: dragStateRef.current.startY + deltaY,
-      });
+      };
+      scheduleCanvasUpdate();
 
       lastPointerRef.current = {
         x: nativeEvent.clientX,
@@ -1109,19 +1139,42 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
     };
 
     const cleanupDragListeners = () => {
-      window.removeEventListener("mousemove", handlePointerMove);
-      window.removeEventListener("mouseup", handlePointerEnd);
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerEnd);
+      window.removeEventListener("pointercancel", handlePointerEnd);
       window.removeEventListener("blur", handleWindowBlur);
-      document.body.style.userSelect = "";
+      document.body.style.userSelect = previousUserSelect;
+
+      if (dragSurface.hasPointerCapture(event.pointerId)) {
+        dragSurface.releasePointerCapture(event.pointerId);
+      }
+
       dragCleanupRef.current = null;
     };
 
-    const handlePointerEnd = () => {
+    const handlePointerEnd = (nativeEvent: PointerEvent) => {
+      if (
+        dragStateRef.current &&
+        nativeEvent.pointerId !== dragStateRef.current.pointerId
+      ) {
+        return;
+      }
+
+      if (dragFrameRef.current !== null) {
+        cancelAnimationFrame(dragFrameRef.current);
+        dragFrameRef.current = null;
+      }
+      flushPendingDragOffset();
       cleanupDragListeners();
       endPointerDrag();
     };
 
     const handleWindowBlur = () => {
+      if (dragFrameRef.current !== null) {
+        cancelAnimationFrame(dragFrameRef.current);
+        dragFrameRef.current = null;
+      }
+      pendingDragOffsetRef.current = null;
       cleanupDragListeners();
       endPointerDrag();
     };
@@ -1130,9 +1183,9 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
       dragCleanupRef.current();
     }
 
-    document.body.style.userSelect = "none";
-    window.addEventListener("mousemove", handlePointerMove, { passive: false });
-    window.addEventListener("mouseup", handlePointerEnd);
+    window.addEventListener("pointermove", handlePointerMove, { passive: false });
+    window.addEventListener("pointerup", handlePointerEnd);
+    window.addEventListener("pointercancel", handlePointerEnd);
     window.addEventListener("blur", handleWindowBlur);
     dragCleanupRef.current = cleanupDragListeners;
   }
@@ -1140,13 +1193,11 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
   function handleSortChange(nextField: SortField) {
     if (sortField === nextField) {
       setSortDirection((current) => (current === "desc" ? "asc" : "desc"));
-      setListAnimationCycle((cycle) => cycle + 1);
       return;
     }
 
     setSortField(nextField);
     setSortDirection("desc");
-    setListAnimationCycle((cycle) => cycle + 1);
   }
 
   function getSortQualifierLabel(field: SortField) {
@@ -1167,161 +1218,122 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
 
   function handleHomeClick() {
     setViewMode("grid");
+    window.history.replaceState(null, "", "/?view=grid");
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  function handleRaceOpen(item: RaceEntry) {
+  function handleCollectionViewChange(
+    nextView: WallView,
+    interactionDetail: number,
+  ) {
+    if (nextView === "grid") {
+      setAnimateCanvasEntry(viewMode !== "grid" && interactionDetail > 0);
+    } else {
+      stopInertia();
+    }
+
+    setViewMode(nextView);
+    window.history.replaceState(
+      null,
+      "",
+      nextView === "list" ? "/?view=list" : "/?view=grid",
+    );
+  }
+
+  function handleRaceOpen(item: RaceEntry, trigger?: HTMLButtonElement) {
     if (suppressClickRef.current) {
       suppressClickRef.current = false;
       return;
-    }
-
-    if (detailPanelExitTimeoutRef.current !== null) {
-      window.clearTimeout(detailPanelExitTimeoutRef.current);
-      detailPanelExitTimeoutRef.current = null;
-    }
-
-    if (detailPanelBackdropCloseTimeoutRef.current !== null) {
-      window.clearTimeout(detailPanelBackdropCloseTimeoutRef.current);
-      detailPanelBackdropCloseTimeoutRef.current = null;
     }
 
     if (selectedRace?.slug === item.slug && isDetailPanelOpen) {
       return;
     }
 
-    if (selectedRace?.slug === item.slug) {
-      setDetailPanelInstance((current) => current + 1);
+    detailTriggerRef.current = trigger ?? null;
+    document.documentElement.dataset.detailPanelOpen = "true";
+
+    if (trigger) {
+      trigger.blur();
+    }
+
+    const openDetails = () => {
+      drawerOpenFrameRef.current = null;
+      setSelectedRace(item);
       setIsDetailPanelOpen(true);
+    };
+
+    if (viewMode === "grid") {
+      stopInertia();
+
+      if (dragFrameRef.current !== null) {
+        cancelAnimationFrame(dragFrameRef.current);
+        dragFrameRef.current = null;
+      }
+
+      pendingDragOffsetRef.current = null;
+      drawerOpenFrameRef.current = requestAnimationFrame(openDetails);
       return;
     }
 
-    setSelectedRace(item);
-    setDetailPanelInstance((current) => current + 1);
-    setIsDetailPanelOpen(true);
+    openDetails();
+  }
+
+  function handleDetailOpenChange(open: boolean) {
+    setIsDetailPanelOpen(open);
+  }
+
+  function handleDetailCloseAutoFocus() {
+    const trigger = detailTriggerRef.current;
+
+    delete document.documentElement.dataset.detailPanelOpen;
+
+    if (!trigger || !trigger.isConnected) {
+      return;
+    }
+
+    trigger.focus({ preventScroll: true });
   }
 
   return (
     <main className="min-h-screen bg-background font-sans text-foreground">
-      <header className="fixed inset-x-0 top-0 z-20 border-b border-border/70 bg-background/88 backdrop-blur-xl">
-        <div className="flex items-center justify-between gap-6 px-4 py-3 sm:px-6">
-          <div className="flex min-w-0 items-center gap-1.5 text-left text-sm text-muted-foreground">
-            <button
-              type="button"
-              onClick={handleHomeClick}
-              aria-label="Go to home grid view"
-              className="flex shrink-0 items-center gap-2 rounded-md transition-opacity hover:opacity-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/25"
-            >
-              <Image
-                src="/logo.svg"
-                alt="BIB WALL"
-                width={807}
-                height={577}
-                priority
-                className="h-7 w-auto shrink-0"
-              />
-              <span className="shrink-0 font-heading text-foreground">BIB WALL</span>
-            </button>
-            <span className="shrink-0 text-muted-foreground/60">·</span>
-            <span className="flex min-w-0 items-center [font-family:var(--font-geist-sans)]">
-              <span className="truncate">A collection of race bibs from years of&nbsp;</span>
-              <span className="group relative shrink-0">
-                <span className="underline decoration-foreground/30 underline-offset-[3px] transition-colors group-hover:text-foreground group-hover:decoration-foreground/60">
-                  type 2 fun
-                </span>
-                <span className="pointer-events-none absolute left-1/2 top-full z-20 mt-2 -translate-x-1/2 whitespace-nowrap rounded-[6px] border border-border/70 bg-background/95 px-2 py-1 font-mono text-[12px] normal-case text-foreground opacity-0 shadow-sm transition duration-150 group-hover:opacity-100">
-                  Not always fun in the moment, but somehow you sign up for another race right after.
-                </span>
-              </span>
-              <span className="shrink-0">.</span>
-            </span>
-          </div>
-
-          <div className="flex items-center gap-6 text-xs uppercase text-muted-foreground">
-            <NumberFlowGroup>
-              <div className="flex items-center gap-5">
-                <span className="inline-flex items-center gap-1.5 transition-colors hover:text-foreground">
-                  <NumberFlow
-                    value={animatedCount}
-                    format={{ useGrouping: false }}
-                    className="tabular-nums"
-                  />
-                  <span>races</span>
-                </span>
-                <span className="group relative inline-flex items-center gap-2 transition-colors hover:text-foreground">
-                  <NavStatTooltip label="Total distance" />
-                  <DistanceIcon />
-                  <NumberFlow
-                    value={animatedDistance}
-                    format={{
-                      minimumFractionDigits: distancePrecision,
-                      maximumFractionDigits: distancePrecision,
-                      useGrouping: false,
-                    }}
-                    suffix="km"
-                    className="tabular-nums"
-                  />
-                </span>
-                <span className="group relative inline-flex items-center gap-2 transition-colors hover:text-foreground">
-                  <NavStatTooltip label="Elevation gain" />
-                  <ElevationIcon />
-                  <NumberFlow
-                    value={animatedElevation}
-                    format={{ maximumFractionDigits: 0, useGrouping: false }}
-                    suffix="m"
-                    className="tabular-nums"
-                  />
-                </span>
-              </div>
-            </NumberFlowGroup>
-
-            <div className="h-5 w-px bg-foreground/18" />
-
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => setViewMode("grid")}
-                aria-label="Grid view"
-                className={`inline-flex items-center p-1.5 transition ${
-                  viewMode === "grid"
-                    ? "text-foreground opacity-100"
-                    : "text-muted-foreground opacity-35 hover:opacity-100 hover:text-foreground"
-                }`}
-              >
-                <GridIcon />
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setViewMode("list");
-                  setListAnimationCycle((cycle) => cycle + 1);
-                }}
-                aria-label="List view"
-                className={`inline-flex items-center p-1.5 transition ${
-                  viewMode === "list"
-                    ? "text-foreground opacity-100"
-                    : "text-muted-foreground opacity-35 hover:opacity-100 hover:text-foreground"
-                }`}
-              >
-                <ListIcon />
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
+      <h1 className="sr-only">Bib Wall race collection</h1>
+      <CollectionHeader
+        activeView={viewMode}
+        count={animatedCount}
+        distance={animatedDistance}
+        elevation={animatedElevation}
+        distancePrecision={distancePrecision}
+        onHomeClick={handleHomeClick}
+        onViewChange={handleCollectionViewChange}
+      />
 
       {viewMode === "grid" ? (
         <section
-          ref={sectionRef}
-          className={`relative h-screen select-none overflow-hidden bg-background pt-[57px] ${
-            isDragging ? "cursor-grabbing" : "cursor-grab"
-          }`}
+          aria-label="Race bib gallery"
+          aria-describedby="gallery-instructions"
+          className="relative h-screen touch-none cursor-grab select-none overflow-hidden bg-background pt-[57px] data-[dragging]:cursor-grabbing"
           onDragStart={(event) => event.preventDefault()}
-          onMouseDown={handlePointerDown}
+          onPointerDown={handlePointerDown}
         >
+          <p id="gallery-instructions" className="sr-only">
+            Drag in any direction to explore. Use Tab to move through each race and Enter to open
+            its details.
+          </p>
+          {races.length === 0 ? (
+            <div className="absolute inset-0 flex items-center justify-center px-6 pt-[57px] text-center">
+              <div>
+                <h2 className="text-base text-foreground">No race bibs yet</h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Add a race entry to start the collection.
+                </p>
+              </div>
+            </div>
+          ) : null}
           <div
             ref={canvasRef}
-            className="absolute left-1/2 top-1/2 will-change-transform"
+            data-canvas-layer=""
+            className="absolute left-1/2 top-1/2"
             style={{
               width: `${canvasWidth}px`,
               height: `${canvasHeight}px`,
@@ -1329,51 +1341,102 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
             }}
           >
             {TILE_OFFSETS.flatMap((tileY) =>
-              TILE_OFFSETS.flatMap((tileX) =>
-                tiledRaces.map((item, index) => {
-                  const position = getCardPosition(index, gridColumns);
+              TILE_OFFSETS.map((tileX) => (
+                <div
+                  key={`${tileX}-${tileY}`}
+                  aria-hidden={tileX === 0 && tileY === 0 ? undefined : true}
+                  data-canvas-tile=""
+                  className="absolute [contain:layout_paint_style] [content-visibility:auto]"
+                  style={{
+                    left: `${tileX * canvasWidth}px`,
+                    top: `${tileY * canvasHeight}px`,
+                    width: `${canvasWidth}px`,
+                    height: `${canvasHeight}px`,
+                    containIntrinsicSize: `${canvasWidth}px ${canvasHeight}px`,
+                  }}
+                >
+                  {tiledRaces.map((item, index) => {
+                    const position = getCardPosition(index, gridColumns);
 
-                  return (
-                    <GalleryCard
-                      key={`${tileX}-${tileY}-${index}-${item.slug}`}
-                      item={item}
-                      x={position.x + tileX * canvasWidth}
-                      y={position.y + tileY * canvasHeight}
-                      onOpen={handleRaceOpen}
-                    />
-                  );
-                })
-              )
+                    return (
+                      <GalleryCard
+                        key={`${index}-${item.slug}`}
+                        item={item}
+                        x={position.x}
+                        y={position.y}
+                        onOpen={handleRaceOpen}
+                        interactive={
+                          tileX === 0 &&
+                          tileY === 0 &&
+                          index < shuffledRaces.length
+                        }
+                      />
+                    );
+                  })}
+                </div>
+              ))
             )}
           </div>
         </section>
       ) : (
         <section className="min-h-screen bg-background pt-[81px]">
-          <div className="mx-auto max-w-[640px] px-4 pb-10 sm:px-6">
-            <div className="mb-6 flex items-center justify-between gap-6">
-              <Tabs
-                tabs={filterTabs}
-                activeTab={activeFilter}
-                onTabChange={(tabId) => {
-                  setActiveFilter(tabId);
-                  setListAnimationCycle((cycle) => cycle + 1);
-                }}
-                className="min-w-0 text-xs"
-              />
+          <div className="mx-auto max-w-[700px] px-4 pb-10 sm:px-6">
+            <div className="mb-6 -mx-2 flex w-[calc(100%+1rem)] flex-col items-stretch gap-3 sm:-mx-5 sm:w-[calc(100%+2.5rem)] min-[720px]:flex-row min-[720px]:items-center min-[720px]:justify-between min-[720px]:gap-6">
+              <div className="-mx-1 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                <ToggleGroup
+                  type="single"
+                  value={activeFilter}
+                  onValueChange={(value) => {
+                    if (value) {
+                      setActiveFilter(value);
+                    }
+                  }}
+                  aria-label="Filter races by type"
+                  className="min-w-max"
+                >
+                  {FILTER_OPTIONS.map((tab) => (
+                    <ToggleGroupItem
+                      key={tab.id}
+                      value={tab.id}
+                      aria-label={`Show ${tab.label} races`}
+                      className="h-10 rounded-[4px] px-3 font-normal text-muted-foreground data-[state=on]:bg-muted data-[state=on]:text-foreground"
+                    >
+                      {tab.label}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
+              </div>
 
-              <div className="flex shrink-0 items-center gap-3 text-[14px] text-muted-foreground">
-                {sortOptions.map((option) => {
+              <div
+                ref={sortScrollerRef}
+                className="-mx-1 overflow-x-auto px-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+              >
+                <div
+                  className="flex min-w-max items-center gap-1 pe-2 text-[14px] text-muted-foreground min-[720px]:pe-0"
+                  role="group"
+                  aria-label="Sort races"
+                >
+                {SORT_OPTIONS.map((option) => {
                   const isActive = sortField === option.id;
                   const qualifier = getSortQualifierLabel(option.id);
 
                   return (
                     <button
                       key={option.id}
+                      ref={(node) => {
+                        sortButtonRefs.current[option.id] = node;
+                      }}
                       type="button"
                       onClick={() => handleSortChange(option.id)}
-                      className={`group relative inline-flex items-center gap-1.5 transition ${
+                      aria-pressed={isActive}
+                      aria-label={
                         isActive
-                          ? "text-foreground"
+                          ? `Sort by ${option.label}, ${qualifier}. Activate to reverse order.`
+                          : `Sort by ${option.label}`
+                      }
+                      className={`group relative inline-flex h-10 items-center gap-1.5 rounded-[4px] px-2 transition-[background-color,color,transform] active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/35 ${
+                        isActive
+                          ? "bg-muted text-foreground"
                           : "text-muted-foreground hover:text-foreground"
                       }`}
                     >
@@ -1382,8 +1445,13 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
                     </button>
                   );
                 })}
+                </div>
               </div>
             </div>
+            <p role="status" className="sr-only">
+              Showing {sortedRaces.length} {activeFilter === "All" ? "" : activeFilter} races,
+              sorted by {sortField} {getSortQualifierLabel(sortField)}.
+            </p>
 
             <div
               ref={listContainerRef}
@@ -1391,7 +1459,7 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
               onMouseLeave={() => setHoveredListRace(null)}
             >
               <div
-                className="pointer-events-none absolute rounded-[8px] bg-foreground/[0.04] transition-all duration-300 ease-out"
+                className="pointer-events-none absolute rounded-[8px] bg-muted transition-[top,left,width,height,opacity] duration-200 ease-out"
                 style={{
                   ...listHoverStyle,
                   opacity: hoveredListRace ? 1 : 0,
@@ -1399,7 +1467,7 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
               />
               {sortedRaces.map((item, index) => (
                 <ListRow
-                  key={`${listAnimationCycle}-${item.slug}`}
+                  key={item.slug}
                   item={item}
                   index={index}
                   onOpen={handleRaceOpen}
@@ -1409,6 +1477,21 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
                   onHoverStart={() => setHoveredListRace(item.slug)}
                 />
               ))}
+              {sortedRaces.length === 0 ? (
+                <div className="rounded-[8px] border border-border/70 px-5 py-10 text-center">
+                  <h2 className="text-base text-foreground">No {activeFilter} races yet</h2>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    Try another race type or show the full collection.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setActiveFilter("All")}
+                    className="mt-5 inline-flex h-10 items-center justify-center rounded-[4px] border border-border/70 px-4 text-sm text-foreground transition-[background-color,transform] hover:bg-muted active:scale-[0.96] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-foreground/35"
+                  >
+                    Show all races
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         </section>
@@ -1416,11 +1499,11 @@ export function BibWall({ races }: { races: RaceEntry[] }) {
 
       {selectedRace ? (
         <RaceDetailPanel
-          key={`${selectedRace.slug}-${detailPanelInstance}`}
+          key={selectedRace.slug}
           race={selectedRace}
           isOpen={isDetailPanelOpen}
-          onBackdropClose={handleBackdropClose}
-          onExited={clearDetailPanel}
+          onOpenChange={handleDetailOpenChange}
+          onCloseAutoFocus={handleDetailCloseAutoFocus}
         />
       ) : null}
     </main>

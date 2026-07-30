@@ -5,6 +5,10 @@ distance: 60km
 elevation: 3000m
 date: 25/04/2026
 bibImage: miut-60k-2026.png
+photos:
+  - 1.jpg
+  - 2.jpg
+  - 3.jpg
 ---
 
 Once again in the MIUT 60, three years later. 

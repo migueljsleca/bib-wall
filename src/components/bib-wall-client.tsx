@@ -1,16 +1,15 @@
 "use client";
 
-import dynamic from "next/dynamic";
-
+import { BibWall } from "@/components/bib-wall";
+import type { WallView } from "@/components/collection-header";
 import type { RaceEntry } from "@/lib/race-types";
 
-const ClientOnlyBibWall = dynamic(
-  () => import("@/components/bib-wall").then((module) => module.BibWall),
-  {
-    ssr: false,
-  }
-);
-
-export function BibWallClient({ races }: { races: RaceEntry[] }) {
-  return <ClientOnlyBibWall races={races} />;
+export function BibWallClient({
+  races,
+  initialView,
+}: {
+  races: RaceEntry[];
+  initialView: WallView;
+}) {
+  return <BibWall races={races} initialView={initialView} />;
 }

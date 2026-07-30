@@ -15,7 +15,7 @@
   --primary-foreground: oklch(0.9851 0 0);
   --secondary: oklch(0.9702 0 0);
   --secondary-foreground: oklch(0.2046 0 0);
-  --muted: oklch(0.9702 0 0);
+  --muted: color-mix(in oklch, var(--background) 96%, var(--foreground) 4%);
   --muted-foreground: oklch(0.5486 0 0);
   --accent: oklch(0.9702 0 0);
   --accent-foreground: oklch(0.2046 0 0);
@@ -73,7 +73,7 @@
   --primary-foreground: oklch(0.9851 0 0);
   --secondary: oklch(0.2686 0 0);
   --secondary-foreground: oklch(0.9851 0 0);
-  --muted: oklch(0.2686 0 0);
+  --muted: color-mix(in oklch, var(--background) 96%, var(--foreground) 4%);
   --muted-foreground: oklch(0.7090 0 0);
   --accent: oklch(0.3715 0 0);
   --accent-foreground: oklch(0.9851 0 0);
@@ -156,10 +156,11 @@
   --font-mono: Geist Mono, monospace;
   --font-serif: Geist Mono, monospace;
   --font-heading: var(--font-sans);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  --radius-xs: calc(var(--radius) * 0.5);
+  --radius-sm: calc(var(--radius) * 0.75);
+  --radius-md: calc(var(--radius) * 0.875);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-xl: calc(var(--radius) * 1.5);
   --shadow-2xs: var(--shadow-2xs);
   --shadow-xs: var(--shadow-xs);
   --shadow-sm: var(--shadow-sm);
@@ -250,6 +251,27 @@ html[data-view-mode="list"] body::-webkit-scrollbar {
   }
 }
 
+[data-detail-panel-open="true"] [data-race-card] > div > div {
+  transition-duration: 0ms;
+}
+
+@keyframes canvas-bib-enter {
+  0% {
+    opacity: 0.12;
+    transform: translateY(16px) scale(0.985);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+[data-canvas-enter] {
+  animation: canvas-bib-enter 260ms cubic-bezier(0.23, 1, 0.32, 1) backwards;
+  animation-delay: var(--canvas-entry-delay, 0ms);
+}
+
 @keyframes detail-backdrop-enter {
   0% {
     opacity: 0;
@@ -267,5 +289,80 @@ html[data-view-mode="list"] body::-webkit-scrollbar {
 
   100% {
     transform: translateX(0);
+  }
+}
+
+@keyframes lifeline-rail-draw {
+  from {
+    transform: scaleX(0);
+  }
+
+  to {
+    transform: scaleX(1);
+  }
+}
+
+@keyframes lifeline-marker-in {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 6px, 0);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+}
+
+@keyframes lifeline-labels-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.lifeline-rail-intro {
+  transform: scaleX(var(--lifeline-intro-progress, 0));
+  transform-origin: left center;
+}
+
+.lifeline-rail-intro-vertical {
+  transform: scaleY(var(--lifeline-intro-progress, 0));
+  transform-origin: top center;
+}
+
+.lifeline-marker-intro {
+  opacity: 0;
+  animation: lifeline-marker-in var(--lifeline-marker-fade-ms, 420ms)
+    cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.lifeline-labels-intro {
+  opacity: 0;
+  animation: lifeline-labels-in var(--lifeline-labels-ms, 600ms)
+    cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.lifeline-labels.is-pinned {
+  z-index: 20;
+}
+
+.lifeline-typeset {
+  --lifeline-font: var(--font-geist-sans, "Geist"), "Geist Fallback",
+    ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--lifeline-font);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

@@ -5,6 +5,9 @@ distance: 25km
 elevation: 1200m
 date: 14/09/2025
 bibImage: trail-agua-de-pena-2025.png
+photos:
+  - 1.jpg
+  - 2.jpg
 ---
 
 Metadata pending update.
