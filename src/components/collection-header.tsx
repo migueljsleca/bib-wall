@@ -195,7 +195,7 @@ export function CollectionHeader({
           <div
             role="group"
             aria-label="Choose collection view"
-            className="flex h-10 items-stretch text-[11px] tracking-[0.04em]"
+            className="flex h-10 items-stretch text-[11px] normal-case tracking-[0.04em]"
           >
             {(
               [
