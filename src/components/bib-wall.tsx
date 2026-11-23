@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import { RaceImage } from "@/components/race-image";
 import {
   Fragment,
   useCallback,
@@ -275,7 +275,7 @@ function RacePreview({ image, raceName }: { image?: string; raceName: string }) 
   if (image) {
     return (
       <div className="relative aspect-[4/3] w-full overflow-hidden rounded-[8px]">
-        <Image
+        <RaceImage
           src={image}
           alt={raceName}
           fill
@@ -566,7 +566,7 @@ function RaceDetailPanel({
                   <div className="space-y-3">
                     <div>
                       <div className="relative aspect-[4/3] overflow-hidden border border-border/70 bg-background">
-                        <Image
+                        <RaceImage
                           src={race.photos[activePhotoIndex]}
                           alt={`${race.raceName} photo ${activePhotoIndex + 1}`}
                           fill

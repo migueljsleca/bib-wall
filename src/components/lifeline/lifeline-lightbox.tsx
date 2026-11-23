@@ -11,6 +11,7 @@ import {
 } from "react"
 import { createPortal } from "react-dom"
 import { cn } from "@/lib/utils"
+import { raceImageSrcSet } from "@/lib/race-image-loader"
 import type { LifelinePhoto } from "./types"
 
 const OPEN_MS = 520
@@ -86,6 +87,8 @@ function LightboxMedia({
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={photo.src}
+        srcSet={raceImageSrcSet(photo.src)}
+        sizes="78vw"
         alt={photo.alt}
         className="block h-full w-full object-cover"
       />

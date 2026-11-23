@@ -12,6 +12,7 @@ import {
   type ReactNode,
 } from "react"
 import { clamp, snapToDevicePixel } from "./lifeline-utils"
+import { raceImageUrl } from "@/lib/race-image-loader"
 import type { LifelineEventImage } from "./types"
 
 /** Tweak these */
@@ -87,7 +88,7 @@ export function LifelineHoverImageProvider({
     const warm = () => {
       preload.forEach(({ src }) => {
         const image = new window.Image()
-        image.src = src
+        image.src = raceImageUrl(src, 280 * window.devicePixelRatio)
       })
     }
 
@@ -179,7 +180,7 @@ export function LifelineHoverImageProvider({
         }
         img.style.display = "block"
 
-        const targetSrc = new URL(image.src, window.location.origin).href
+        const targetSrc = new URL(raceImageUrl(image.src, 280 * window.devicePixelRatio), window.location.origin).href
 
         if (img.src !== targetSrc) {
           // Kill the previous bitmap instantly — the browser would keep

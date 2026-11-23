@@ -10,7 +10,11 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "npm run lint && npm run typecheck && npm run test",
-    "images:bib-previews": "node scripts/generate-bib-previews.mjs"
+    "images:bib-previews": "npm run images:prepare",
+    "predev": "npm run images:prepare",
+    "prebuild": "npm run images:prepare",
+    "pretypecheck": "npm run images:prepare",
+    "images:prepare": "node scripts/generate-race-images.mjs"
   },
   "dependencies": {
     "@number-flow/react": "^0.6.0",
@@ -33,6 +37,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.11",
+    "sharp": "^0.35.5",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.10"

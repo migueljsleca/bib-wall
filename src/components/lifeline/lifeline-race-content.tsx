@@ -3,6 +3,7 @@ import {
   LifelineEventText,
 } from "./lifeline-event"
 import { RaceTypeTag } from "@/components/race-type-tag"
+import { raceImageSrcSet } from "@/lib/race-image-loader"
 import type { LifelineMarker } from "./types"
 
 function DistanceIcon() {
@@ -39,6 +40,9 @@ export function LifelineRaceContent({ marker }: { marker: LifelineMarker }) {
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={race.bib.src}
+          srcSet={raceImageSrcSet(race.bib.src)}
+          sizes="108px"
+          loading="lazy"
           alt={race.bib.alt}
           draggable={false}
           className="mb-5 block h-auto max-h-[4.5rem] w-auto max-w-[6.75rem] object-contain object-left"

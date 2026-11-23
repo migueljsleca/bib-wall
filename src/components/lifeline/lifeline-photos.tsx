@@ -1,5 +1,7 @@
 "use client"
 
+import { raceImageUrl } from "@/lib/race-image-loader"
+
 import {
   useEffect,
   useRef,
@@ -261,7 +263,7 @@ export function LifelineRacePhotoStack({
             probe.onload = () =>
               resolve(probe.naturalHeight > probe.naturalWidth)
             probe.onerror = () => resolve(false)
-            probe.src = photo.src
+            probe.src = raceImageUrl(photo.src, 320)
           }),
       ),
     ).then((orientations) => {

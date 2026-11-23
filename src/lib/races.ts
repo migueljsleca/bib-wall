@@ -1,9 +1,9 @@
 import { promises as fs } from "node:fs";
-import { createHash } from "node:crypto";
 import path from "node:path";
 import { cache } from "react";
 
 import type { RaceEntry } from "@/lib/race-types";
+import generatedImages from "@/lib/generated/race-images.json";
 
 const RACES_DIR = path.join(process.cwd(), "races");
 
@@ -100,52 +100,16 @@ function toAssetUrl(slug: string, assetPath: string | undefined) {
   return `/race-assets/${encodeURIComponent(slug)}/${encodedPath}`;
 }
 
-async function pathExists(filePath: string) {
-  try {
-    await fs.access(filePath);
-    return true;
-  } catch {
-    return false;
+// The build prepares these files; request handling only looks up their URLs.
+function toImageUrl(slug: string, assetPath: string | undefined) {
+  if (!assetPath) return undefined;
+  if (assetPath.startsWith("/")) return assetPath;
+
+  const url = (generatedImages as Record<string, string>)[`${slug}/${assetPath}`];
+  if (!url) {
+    throw new Error(`Missing prepared image: ${slug}/${assetPath}. Run npm run images:prepare.`);
   }
-}
-
-// Hash file contents rather than timestamps so deploys reuse unchanged images.
-const toImageUrl = cache(async (slug: string, assetPath: string) => {
-  const url = toAssetUrl(slug, assetPath)!;
-
-  if (assetPath.startsWith("/")) {
-    return url;
-  }
-
-  const file = await fs.readFile(path.join(RACES_DIR, slug, assetPath));
-  const version = createHash("sha256").update(file).digest("hex").slice(0, 16);
-  return `${url}?v=${version}`;
-});
-
-async function resolveBibAssetPath(directoryName: string, assetPath: string | undefined) {
-  if (!assetPath) {
-    return undefined;
-  }
-
-  const parsedPath = path.parse(assetPath);
-  const previewCandidates = [
-    `${parsedPath.name}.preview.avif`,
-    `${parsedPath.name}.preview.webp`,
-    `${parsedPath.name}.preview.png`,
-    `${parsedPath.name}.preview.jpg`,
-    `${parsedPath.name}.preview.jpeg`,
-  ];
-
-  for (const previewFileName of previewCandidates) {
-    const previewRelativePath = path.join(parsedPath.dir, previewFileName);
-    const previewAbsolutePath = path.join(RACES_DIR, directoryName, previewRelativePath);
-
-    if (await pathExists(previewAbsolutePath)) {
-      return toImageUrl(directoryName, previewRelativePath);
-    }
-  }
-
-  return toImageUrl(directoryName, assetPath);
+  return url;
 }
 
 async function readRaceDirectory(directoryName: string): Promise<RaceEntry> {
@@ -174,14 +138,12 @@ async function readRaceDirectory(directoryName: string): Promise<RaceEntry> {
     distance: frontmatter.distance as string,
     elevation: frontmatter.elevation as string,
     date: frontmatter.date as string,
-    bibImage: await resolveBibAssetPath(
+    bibImage: toImageUrl(
       directoryName,
       toOptionalString(frontmatter.bibImage)
     ),
     gpxFile: toAssetUrl(directoryName, toOptionalString(frontmatter.gpxFile)),
-    photos: await Promise.all(
-      toStringArray(frontmatter.photos).map((photo) => toImageUrl(directoryName, photo))
-    ),
+    photos: toStringArray(frontmatter.photos).map((photo) => toImageUrl(directoryName, photo)!),
     notes: content,
   };
 }

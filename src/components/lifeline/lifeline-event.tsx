@@ -1,3 +1,4 @@
+import { raceImageSrcSet } from "@/lib/race-image-loader"
 import type {
   LifelineEvent,
   LifelineEventEffect,
@@ -95,7 +96,7 @@ export function LifelineEventMedia({
 
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={media.src} alt={media.alt} loading="lazy" className={className} />
+    <img src={media.src} srcSet={raceImageSrcSet(media.src)} sizes="300px" alt={media.alt} loading="lazy" className={className} />
   )
 }
 
