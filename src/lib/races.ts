@@ -1,4 +1,5 @@
 import { promises as fs } from "node:fs";
+import { createHash } from "node:crypto";
 import path from "node:path";
 import { cache } from "react";
 
@@ -108,6 +109,19 @@ async function pathExists(filePath: string) {
   }
 }
 
+// Hash file contents rather than timestamps so deploys reuse unchanged images.
+const toImageUrl = cache(async (slug: string, assetPath: string) => {
+  const url = toAssetUrl(slug, assetPath)!;
+
+  if (assetPath.startsWith("/")) {
+    return url;
+  }
+
+  const file = await fs.readFile(path.join(RACES_DIR, slug, assetPath));
+  const version = createHash("sha256").update(file).digest("hex").slice(0, 16);
+  return `${url}?v=${version}`;
+});
+
 async function resolveBibAssetPath(directoryName: string, assetPath: string | undefined) {
   if (!assetPath) {
     return undefined;
@@ -127,11 +141,11 @@ async function resolveBibAssetPath(directoryName: string, assetPath: string | un
     const previewAbsolutePath = path.join(RACES_DIR, directoryName, previewRelativePath);
 
     if (await pathExists(previewAbsolutePath)) {
-      return toAssetUrl(directoryName, previewRelativePath);
+      return toImageUrl(directoryName, previewRelativePath);
     }
   }
 
-  return toAssetUrl(directoryName, assetPath);
+  return toImageUrl(directoryName, assetPath);
 }
 
 async function readRaceDirectory(directoryName: string): Promise<RaceEntry> {
@@ -165,7 +179,9 @@ async function readRaceDirectory(directoryName: string): Promise<RaceEntry> {
       toOptionalString(frontmatter.bibImage)
     ),
     gpxFile: toAssetUrl(directoryName, toOptionalString(frontmatter.gpxFile)),
-    photos: toStringArray(frontmatter.photos).map((photo) => toAssetUrl(directoryName, photo)!),
+    photos: await Promise.all(
+      toStringArray(frontmatter.photos).map((photo) => toImageUrl(directoryName, photo))
+    ),
     notes: content,
   };
 }
